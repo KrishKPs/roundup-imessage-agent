@@ -45,7 +45,7 @@ export function template(i: MessageIntent): string {
     case "short_organizer": return `heads up: we're ${i.missing} ${i.unit} short for ${i.label} and i've asked everyone who could help. any ideas?`;
     case "stop_confirm": return "got it, you won't hear from me again. take care!";
     case "unknown_code": return "hmm, i don't know that code. can you double-check it with whoever invited you?";
-    case "help": return "hey! i'm Roundup, an AI that plans group trips over text. to join a trip, text join and the code. to plan one, text new trip and a name.";
+    case "help": return "hey! i'm Roundup, an AI that plans group trips over text. planning something? tell me what and when, like \"camping trip saturday\". got a code? just send it.";
     case "already_member": return `you're already in ${i.trip}!`;
     case "waiting_for_start": return `you're all set! i'll text you once ${i.organizer} kicks things off.`;
     case "started_organizer": return `we're rolling! i'm texting all ${i.count} people now. text status anytime.`;

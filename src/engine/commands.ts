@@ -5,6 +5,7 @@ import { enqueueAsk } from "./asks.js";
 import { newNeed, releaseCommitments } from "./chain.js";
 import { type Ctx, goingMembers, organizerName, seatsNeed } from "./context.js";
 import { budgetAnsweredCount, finalize } from "./plan.js";
+import { findJoinCode, organizerVerb, parseTripRequest, textAfterCode } from "./intents.js";
 
 export function newMember(phone: Phone, name: string, now: number): Member {
   return {
@@ -58,26 +59,37 @@ export function handleCommand(env: CommandEnv, phone: Phone, text: string): bool
     return true;
   }
 
-  const newTrip = t.match(/^new trip\s+(.+?)(?:\s+on\s+(.+))?$/i);
-  if (newTrip) {
-    createTrip(env, phone, newTrip[1].trim(), newTrip[2]?.trim() ?? null);
+  // Joining: a known code anywhere in the message, unless they're already in that trip.
+  const code = findJoinCode(t, Object.values(state.trips).map((x) => x.code));
+  if (code && !(trip && trip.code === code && trip.members[phone])) {
+    const after = textAfterCode(t, code);
+    joinTrip(env, phone, code, after ? parseName(after) : null);
+    return true;
+  }
+  if (/^join\b/i.test(t) && !trip?.members[phone]) {
+    ctx.out(phone, { kind: "unknown_code" });
     return true;
   }
 
-  const join = t.match(/^join\s+([a-z0-9]{4,7})\b[\s,]*(.*)$/i);
-  if (join) {
-    joinTrip(env, phone, join[1].toUpperCase(), join[2] ? parseName(join[2]) : null);
-    return true;
+  // Starting a trip: free text from someone not in a trip, or an explicit "new trip ..." from anyone.
+  const explicitNew = /^(new|plan a new|start a new|another)\b.*\b(trip|getaway|vacation|weekend|outing|hike|party|day)\b/i.test(t);
+  if (!trip?.members[phone] || explicitNew) {
+    const req = parseTripRequest(t.replace(/^new trip\s*:?\s*/i, "new trip "));
+    if (req) {
+      createTrip(env, phone, req.title, req.dateText);
+      return true;
+    }
   }
 
-  const organizerCmd = /^(start|status|plan)$/.test(lower) || /^need\s+/i.test(t);
+  const verb = organizerVerb(t);
+  const organizerCmd = verb !== null || /^need\s+/i.test(t);
   if (!organizerCmd || !trip) return false;
   if (!isOrganizer) {
     ctx.out(phone, { kind: "not_organizer", organizer: organizerName(trip) });
     return true;
   }
 
-  if (lower === "start") {
+  if (verb === "start") {
     if (trip.status !== "collecting_members") {
       ctx.out(phone, { kind: "text", text: "already rolling! text status to see where things are." });
       return true;
@@ -92,12 +104,12 @@ export function handleCommand(env: CommandEnv, phone: Phone, text: string): bool
     return true;
   }
 
-  if (lower === "status") {
+  if (verb === "status") {
     ctx.out(phone, { kind: "text", text: statusText(trip) });
     return true;
   }
 
-  if (lower === "plan") {
+  if (verb === "plan") {
     finalize(ctx, trip);
     return true;
   }
