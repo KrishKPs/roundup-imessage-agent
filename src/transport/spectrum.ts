@@ -5,6 +5,7 @@ import { imessage } from "spectrum-ts/providers/imessage";
 import type { Phone } from "../types.js";
 import { maskPhone, normalizePhone } from "../util.js";
 import type { Transport } from "./transport.js";
+import { UserRegistry } from "./registry.js";
 
 type App = Awaited<ReturnType<typeof Spectrum>>;
 type SpaceLike = { send: (text: string) => Promise<unknown>; responding: (fn: () => Promise<void>) => Promise<unknown> };
@@ -12,7 +13,7 @@ type SpaceLike = { send: (text: string) => Promise<unknown>; responding: (fn: ()
 export class SpectrumTransport implements Transport {
   /** DM spaces we have seen, by phone. Only people who texted us first are ever in here (spec 10.3). */
   private spaces = new Map<Phone, SpaceLike>();
-  private constructor(private app: App) {}
+  private constructor(private app: App, private registry: UserRegistry) {}
 
   static async connect(projectId: string, projectSecret: string): Promise<SpectrumTransport> {
     const app = await Spectrum({
@@ -21,7 +22,9 @@ export class SpectrumTransport implements Transport {
       providers: [imessage.config()],
       options: { logLevel: process.env.SPECTRUM_LOG_LEVEL === "debug" ? "debug" : "info" },
     });
-    return new SpectrumTransport(app);
+    const registry = new UserRegistry(projectId);
+    await registry.load();
+    return new SpectrumTransport(app, registry);
   }
 
   /** Loop over inbound messages forever. `onText` runs inside the typing indicator. */
@@ -59,6 +62,7 @@ export class SpectrumTransport implements Transport {
   }
 
   async send(phone: Phone, text: string): Promise<void> {
+    await this.registry.ensure(phone); // shared pool only messages registered users
     let space = this.spaces.get(phone);
     if (!space) {
       // After a restart we may not have the space cached; reopen the existing DM.
