@@ -89,6 +89,13 @@ export function handleCommand(env: CommandEnv, phone: Phone, text: string): bool
     }
   }
 
+  const newDate = trip?.members[phone] ? parseDateChange(t) : null;
+  if (newDate && trip) {
+    if (!isOrganizer) ctx.out(phone, { kind: "not_organizer", organizer: organizerName(trip) });
+    else setDate(ctx, trip, newDate);
+    return true;
+  }
+
   const pollQuestion = trip?.members[phone] ? parsePollRequest(t) : null;
   if (pollQuestion && trip) {
     if (!isOrganizer) ctx.out(phone, { kind: "not_organizer", organizer: organizerName(trip) });
@@ -329,4 +336,27 @@ export function greetWebSignup(ctx: Ctx, trip: Trip, m: Member): void {
     return;
   }
   welcome(ctx, trip, m);
+}
+
+/** "change the date to saturday 10am", "move it to sunday", "date: oct 18" -> the new date text. */
+export function parseDateChange(raw: string): string | null {
+  const m = raw.trim().match(
+    /^(?:(?:let'?s |can you |pls |please )?(?:change|move|set|switch|push|update)\s+(?:the\s+)?(?:date|day|time|it|trip)\s+(?:to|for)|date\s*(?:is|:)|new date\s*:?)\s+(.+?)[.!]*$/i,
+  );
+  return m && m[1].length <= 40 ? m[1].trim() : null;
+}
+
+/** Organizer changed the date: confirm, and tell everyone we can reach once the trip is under way. */
+export function setDate(ctx: Ctx, trip: Trip, date: string): void {
+  if (trip.dateText?.toLowerCase() === date.toLowerCase()) {
+    ctx.out(trip.organizer, { kind: "text", text: `it's already set for ${date}.` });
+    return;
+  }
+  trip.dateText = date;
+  ctx.log(trip, "answered", `${trip.title} is now ${date}`);
+  const reach = Object.values(trip.members).filter((m) =>
+    m.phone !== trip.organizer && !m.optedOut && m.rsvp !== "no" && m.name && !((m.viaLink || m.invited) && !m.heardFrom));
+  const tell = trip.status !== "collecting_members" && reach.length > 0;
+  for (const m of tell ? reach : []) ctx.out(m.phone, { kind: "text", text: `heads up: ${trip.title} is now ${date}.` });
+  ctx.out(trip.organizer, { kind: "text", text: `done, ${trip.title} is now ${date}.${tell ? " i let everyone know." : ""}` });
 }

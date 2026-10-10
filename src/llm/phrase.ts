@@ -5,7 +5,7 @@ import { clip, joinLink, listNames } from "../util.js";
 import type { Llm } from "./gemini.js";
 import { phrasePrompt } from "./prompts.js";
 
-export type Phraser = (intent: MessageIntent) => Promise<string>;
+export type Phraser = (intent: MessageIntent, history?: { from: "them" | "bot"; text: string }[]) => Promise<string>;
 
 const SIMPLE_QUESTION: Record<AskTopic, string> = {
   name: "what's your first name?",
@@ -94,26 +94,38 @@ function ackText(topic: AskTopic, value: "yes" | "no" | "maybe" | "skip" | "done
   return "got it!";
 }
 
-/** Intents that are casual enough to let Gemini reword. Everything else is always the template. */
-const LLM_OK = new Set<MessageIntent["kind"]>(["ask_rsvp", "ask_drive", "ask_item", "nudge", "drop_ack"]);
+/**
+ * Intents Gemini may reword so the bot sounds like a person, not a form. Plans, summaries, stop confirmations,
+ * and anything with exact wording to copy (commands like "start") stay as templates.
+ */
+const LLM_OK = new Set<MessageIntent["kind"]>([
+  "ask_rsvp", "ask_drive", "ask_item", "ask_budget", "ask_seats", "ask_poll", "nudge", "reask", "drop_ack", "ack",
+  "intro", "invited", "waiting_for_start", "all_set", "late_ack", "noted_car", "handoff_member", "organizer_drop",
+  "needs_added", "question_answer", "already_member",
+]);
 
 export function makePhraser(llm: Llm | null): Phraser {
-  return async (intent) => {
+  return async (intent, history = []) => {
     const draft = template(intent);
     if (!llm || !LLM_OK.has(intent.kind)) return intent.kind === "text" || intent.kind === "invite_line" ? draft : clip(draft);
     try {
-      const out = clip((await llm.generate(phrasePrompt(intent, draft))).replace(/^["']|["']$/g, ""));
-      return isSafeRewrite(draft, out) ? out : clip(draft);
+      const out = clip((await llm.generate(phrasePrompt(intent, draft, history))).trim().replace(/^["']|["']$/g, ""));
+      return isSafeRewrite(draft, out, intent) ? out : clip(draft);
     } catch {
       return clip(draft);
     }
   };
 }
 
-/** Reject rewrites that add numbers, drop the question, or come back empty. */
-function isSafeRewrite(draft: string, out: string): boolean {
-  if (out.length < 5) return false;
-  if (draft.includes("?") && !out.includes("?")) return false;
+/** Reject rewrites that add numbers, drop or add questions, lose the AI disclosure / stop option / trip name. */
+export function isSafeRewrite(draft: string, out: string, intent?: MessageIntent): boolean {
+  if (out.length < 5 || out.includes("\n")) return false;
+  if (draft.includes("?") !== out.includes("?")) return false;
+  if ((out.match(/\?/g) ?? []).length > 1) return false; // one question per message
+  if (/\bAI\b/.test(draft) && !/\bAI\b/i.test(out)) return false; // first contact must say it's an AI
+  if (/\bstop\b/i.test(draft) && !/\bstop\b/i.test(out)) return false;
+  const trip = intent && "trip" in intent ? intent.trip : null;
+  if (trip && draft.includes(trip) && !out.toLowerCase().includes(trip.toLowerCase())) return false;
   const draftNums = new Set(draft.match(/\d+/g) ?? []);
   return (out.match(/\d+/g) ?? []).every((n) => draftNums.has(n));
 }

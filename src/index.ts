@@ -7,6 +7,7 @@ import { makeGemini } from "./llm/gemini.js";
 import { makePhraser } from "./llm/phrase.js";
 import { makeUnderstander } from "./llm/understand.js";
 import { makeTripExtractor } from "./llm/tripRequest.js";
+import { makeConverser } from "./llm/converse.js";
 import { Store } from "./store.js";
 import type { Transport } from "./transport/transport.js";
 import { startTunnel } from "./tunnel.js";
@@ -40,6 +41,7 @@ const engine = new Engine({
   },
   onChange: () => dashboard?.broadcast(),
   extractTrip: makeTripExtractor(understandLlm),
+  converse: makeConverser(understandLlm),
 });
 
 const tunnel = cfg.TUNNEL && !cfg.PUBLIC_URL ? startTunnel(cfg.PORT) : null;

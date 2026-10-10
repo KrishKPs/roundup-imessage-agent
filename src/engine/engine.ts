@@ -3,6 +3,8 @@
 import type { Phraser } from "../llm/phrase.js";
 import type { Understander } from "../llm/understand.js";
 import type { TripExtractor } from "../llm/tripRequest.js";
+import { type Converser, type Turn, replyIsGrounded } from "../llm/converse.js";
+import { factsFor } from "./facts.js";
 import { titleFromAnything } from "./intents.js";
 import type { Store } from "../store.js";
 import type { Transport } from "../transport/transport.js";
@@ -11,13 +13,13 @@ import { clip, normalizePhone, parseName } from "../util.js";
 import { askIntent, enqueueAsk, itemLabel, resolvePending, sendNextQueued } from "./asks.js";
 import { applyChainAnswer, newNeed, recomputeSeats, releaseCommitments, runChain } from "./chain.js";
 import {
-  type CommandEnv, type WebPerson, addPeople, createTrip, createWebTrip, greetWebSignup, handleCommand, joinWebTrip, optOut,
+  type CommandEnv, type WebPerson, addPeople, setDate, createTrip, createWebTrip, greetWebSignup, handleCommand, joinWebTrip, optOut,
   sendTripCreated, welcome,
 } from "./commands.js";
 import { type Ctx, type EngineConfig, isGoing, organizerName, seatsNeed } from "./context.js";
 import { finalize } from "./plan.js";
 import { type SeedInput, buildDemoTrip } from "./seed.js";
-import { recordPollAnswer } from "./poll.js";
+import { recordPollAnswer, startPoll } from "./poll.js";
 import { checkSilence } from "./timers.js";
 
 export interface EngineDeps {
@@ -30,7 +32,11 @@ export interface EngineDeps {
   onChange?: () => void;
   /** Optional Gemini reader for free-text "let's plan X" messages. */
   extractTrip?: TripExtractor;
+  /** Optional Gemini conversation layer for free text (questions, chat, plain-English organizer requests). */
+  converse?: Converser;
 }
+
+const HISTORY_KEEP = 12;
 
 /** Replies that need no answer when we haven't asked anything. */
 const ACK_ONLY = /^(ok|okay|k|kk|cool|sounds good|great|nice|thanks|thank you|thx|ty|got it|bet|perfect|awesome|alright|sure|👍|🙏|❤️|lol|haha)[!. ]*$/i;
@@ -65,6 +71,7 @@ export class Engine {
       const phone = normalizePhone(rawPhone);
       const body = text.trim();
       if (!body) return;
+      this.remember(phone, "them", body);
       const trip = this.tripOf(phone);
       const m = trip?.members[phone];
       if (m?.optedOut) return; // stop is permanent: never reply again
@@ -137,6 +144,63 @@ export class Engine {
     return title;
   }
 
+  private historyOf(phone: Phone): Turn[] {
+    return this.state.history?.[phone] ?? [];
+  }
+
+  private remember(phone: Phone, from: Turn["from"], text: string): void {
+    const all = (this.state.history ??= {});
+    const list = (all[phone] ??= []);
+    list.push({ from, text, at: this.ctx.now() });
+    if (list.length > HISTORY_KEEP) list.splice(0, list.length - HISTORY_KEEP);
+  }
+
+  /**
+   * Free text that isn't a clean answer or command: let Gemini read it with the trip facts and pick an action.
+   * Code runs the action; Gemini's own words are only used when they add no numbers beyond the facts.
+   * Returns false when there's no AI or it failed, so the caller's fixed reply is used instead.
+   */
+  private async talk(trip: Trip, m: Member, text: string): Promise<boolean> {
+    if (!this.deps.converse) return false;
+    const ctx = this.ctx;
+    const isOrganizer = m.phone === trip.organizer;
+    const facts = factsFor(trip, m, ctx);
+    const res = await this.deps.converse({
+      role: isOrganizer ? "organizer" : "member", name: m.name, text, facts, history: this.historyOf(m.phone).slice(-9, -1),
+    });
+    if (!res) return false;
+    const env = this.env();
+    const reply = res.reply && replyIsGrounded(res.reply, facts, text) ? res.reply : null;
+    if (isOrganizer) {
+      switch (res.action) {
+        case "ask_everyone":
+          if (!res.question) break;
+          startPoll(ctx, trip, `${res.question.trim().replace(/[?!.\s]+$/, "")}?`);
+          return true;
+        case "status": return handleCommand(env, m.phone, "status");
+        case "start": return handleCommand(env, m.phone, "start");
+        case "send_plans": return handleCommand(env, m.phone, "plan");
+        case "add_items":
+          if (!res.items?.length) break;
+          return handleCommand(env, m.phone, `need ${res.items.join(", ")}`);
+        case "set_date":
+          if (!res.date) break;
+          setDate(ctx, trip, res.date.trim());
+          return true;
+      }
+    } else if (res.action === "pass_to_organizer") {
+      ctx.out(m.phone, { kind: "text", text: reply ?? `good question, i'll check with ${organizerName(trip)} and get back to you.` });
+      ctx.out(trip.organizer, { kind: "question_organizer", name: m.name || "someone" });
+      ctx.log(trip, "handoff", `passed ${m.name || "someone"}'s question to ${organizerName(trip)}`);
+      return true;
+    }
+    if (!reply) return false;
+    ctx.out(m.phone, { kind: "text", text: reply });
+    // Keep the conversation on track: repeat the open question unless the reply already asks something.
+    if (m.pendingAsk && !reply.includes("?")) ctx.out(m.phone, askIntent(trip, m, m.pendingAsk));
+    return true;
+  }
+
   private env(): CommandEnv {
     return { ctx: this.ctx, state: this.state, resetState: () => this.deps.store.reset() };
   }
@@ -206,7 +270,7 @@ export class Engine {
       return;
     }
 
-    const parsed = await this.deps.understand(text, ask?.topic ?? null);
+    const parsed = await this.deps.understand(text, ask?.topic ?? null, this.historyOf(m.phone).slice(-5, -1));
 
     if (parsed.intent === "opt_out") {
       optOut(ctx, trip, m);
@@ -309,8 +373,9 @@ export class Engine {
   }
 
   /** Answer only from trip facts; anything else goes to the organizer. Then repeat the open question. */
-  private answerQuestion(trip: Trip, m: Member, text: string): void {
+  private async answerQuestion(trip: Trip, m: Member, text: string): Promise<void> {
     const ctx = this.ctx;
+    if (await this.talk(trip, m, text)) return;
     if (m.phone === trip.organizer) {
       // The organizer isn't asking us about their own trip; show them what we can do for them.
       ctx.out(m.phone, { kind: "organizer_help" });
@@ -329,7 +394,7 @@ export class Engine {
   }
 
   /** A message when no question is open: changed answers ("actually i can drive") or chit-chat. */
-  private unprompted(trip: Trip, m: Member, parsed: ParsedReply, text: string): void {
+  private async unprompted(trip: Trip, m: Member, parsed: ParsedReply, text: string): Promise<void> {
     const ctx = this.ctx;
     const seats = seatsNeed(trip);
     const rename = text.trim().match(/^(?:my name is|my name'?s|call me|actually it'?s|it'?s actually|actually my name is|no,? it'?s)\s+(\p{L}+)/iu);
@@ -367,6 +432,7 @@ export class Engine {
       if (m.budgetCap === null) enqueueAsk(ctx, trip, m, "budget");
       return;
     }
+    if (await this.talk(trip, m, text)) return;
     if (m.phone === trip.organizer) return ctx.out(m.phone, { kind: "organizer_help" });
     ctx.out(m.phone, trip.status === "collecting_members"
       ? { kind: "waiting_for_start", organizer: organizerName(trip) }
@@ -454,7 +520,9 @@ export class Engine {
   /** Phrase and send. An ack followed by a question to the same person is merged into one text. */
   private async flush(out: Outbound[]): Promise<void> {
     const texts: { phone: Phone; text: string; isAck: boolean; intent: MessageIntent }[] = [];
-    for (const o of out) texts.push({ phone: o.phone, text: await this.deps.phrase(o.intent), isAck: o.intent.kind === "ack", intent: o.intent });
+    // Phrase in parallel (each may be a Gemini call), with this person's recent chat for context.
+    const phrased = await Promise.all(out.map((o) => this.deps.phrase(o.intent, this.historyOf(o.phone).slice(-4))));
+    out.forEach((o, i) => texts.push({ phone: o.phone, text: phrased[i], isAck: o.intent.kind === "ack", intent: o.intent }));
 
     const merged: { phone: Phone; text: string; intent: MessageIntent }[] = [];
     for (let i = 0; i < texts.length; i++) {
@@ -471,11 +539,13 @@ export class Engine {
       try {
         await this.deps.transport.send(msg.phone, msg.text);
         this.lastSent.set(msg.phone, msg.text);
+        this.remember(msg.phone, "bot", msg.text);
       } catch (err) {
         console.error(`[engine] send failed: ${(err as Error).message}`);
         if (msg.intent.kind === "invited") await this.inviteFailed(msg.phone, msg.intent.name);
       }
     }
+    if (merged.length) this.deps.store.save(); // keep the chat history we just added
   }
 
   /**

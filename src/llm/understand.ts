@@ -5,7 +5,7 @@ import type { AskTopic, ParsedReply } from "../types.js";
 import type { Llm } from "./gemini.js";
 import { understandPrompt } from "./prompts.js";
 
-export type Understander = (text: string, topic: AskTopic | null) => Promise<ParsedReply>;
+export type Understander = (text: string, topic: AskTopic | null, history?: { from: "them" | "bot"; text: string }[]) => Promise<ParsedReply>;
 
 const parsedSchema = z.object({
   intent: z.enum(["answer", "drop", "question", "opt_out", "other"]),
@@ -107,11 +107,11 @@ export function parseModelJson(text: string): ParsedReply {
 }
 
 export function makeUnderstander(llm: Llm | null): Understander {
-  return async (text, topic) => {
+  return async (text, topic, history = []) => {
     const quick = keywordParse(text, topic);
     if (quick.confidence >= 0.85 || !llm) return quick;
     try {
-      const out = await llm.generate(understandPrompt(text, topic), { json: true });
+      const out = await llm.generate(understandPrompt(text, topic, history), { json: true });
       return parseModelJson(out);
     } catch (err) {
       console.warn(`[understand] LLM failed, using keyword result: ${(err as Error).message}`);

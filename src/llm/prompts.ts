@@ -11,10 +11,11 @@ const TOPIC_QUESTION: Record<AskTopic, string> = {
   poll: "Does the organizer's suggestion work for you? (yes / no / maybe)",
 };
 
-export function understandPrompt(text: string, topic: AskTopic | null): string {
+export function understandPrompt(text: string, topic: AskTopic | null, history: { from: "them" | "bot"; text: string }[] = []): string {
   const q = topic ? `The question they were asked: "${TOPIC_QUESTION[topic]}"` : "They were not asked anything just now.";
+  const recent = history.length ? `Recent messages:\n${history.map((t) => `${t.from === "bot" ? "assistant" : "them"}: ${t.text}`).join("\n")}\n` : "";
   return `You read text replies for a group trip planning assistant.
-${q}
+${recent}${q}
 Their reply: "${text.replace(/"/g, "'")}"
 
 Return JSON only, with exactly these keys:
@@ -27,12 +28,20 @@ Rules: extract only what the person stated. Use null for anything not stated. Ne
 "question" means they are asking something. "opt_out" means they want no more messages.`;
 }
 
-export function phrasePrompt(intent: MessageIntent, draft: string): string {
-  return `Rewrite this text message from Roundup, an AI that helps friends plan trips over iMessage.
-Draft: "${draft}"
-Facts (do not add any others): ${JSON.stringify(intent)}
+export function phrasePrompt(intent: MessageIntent, draft: string, history: { from: "them" | "bot"; text: string }[] = []): string {
+  const recent = history.length
+    ? history.map((t) => `${t.from === "bot" ? "you" : "them"}: ${t.text}`).join("\n")
+    : "(first message)";
+  return `You are Roundup, an AI texting a friend 1:1 on iMessage to help plan a group trip. Rewrite the draft so it sounds like a real person texting, and fits the conversation so far.
 
-Rules: sound like a friendly friend texting. lowercase is fine. one short message, under 140 characters.
-keep the same meaning and the same single question if there is one. at most one emoji, usually none.
-do not invent any details. reply with only the message text.`;
+Conversation so far:
+${recent}
+
+Draft: "${draft}"
+Facts (use only these): ${JSON.stringify(intent)}
+
+Rules: casual and warm, lowercase is fine, like a friend not a form. one message under 140 characters.
+keep the exact meaning. if the draft asks a question, ask that same single question; if it doesn't, don't add one.
+keep "AI" and "stop" if the draft has them. don't start the same way as your last message. don't repeat their name every time.
+at most one emoji, usually none. never add details, numbers, or times. reply with only the message text.`;
 }

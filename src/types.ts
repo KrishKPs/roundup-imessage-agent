@@ -101,6 +101,7 @@ export interface State {
   trips: Record<string, Trip>;
   phoneTrip: Record<Phone, string>; // which trip a phone is currently part of
   awaitingPlan?: Record<Phone, number>; // strangers we asked "what are you planning?"
+  history?: Record<Phone, { from: "them" | "bot"; text: string; at: number }[]>; // last few texts per person, for the AI only
 }
 
 // A structured "say this" instruction. llm/phrase.ts turns it into one text.
