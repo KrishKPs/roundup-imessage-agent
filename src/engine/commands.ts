@@ -103,7 +103,8 @@ export function handleCommand(env: CommandEnv, phone: Phone, text: string): bool
     }
     trip.status = "coordinating";
     trip.startedAt = ctx.now();
-    const others = Object.values(trip.members).filter((m) => m.phone !== phone && m.name && !m.optedOut);
+    // Website sign-ups who haven't texted yet can't be reached; they get the RSVP question when they text in.
+    const others = Object.values(trip.members).filter((m) => m.phone !== phone && m.name && !m.optedOut && !(m.viaLink && !m.heardFrom));
     ctx.out(phone, { kind: "started_organizer", count: others.length });
     // The organizer is going by definition; ask them for a budget like everyone else.
     enqueueAsk(ctx, trip, trip.members[phone], "budget");
@@ -262,4 +263,61 @@ export function addPeople(env: CommandEnv, phone: Phone, people: { name: string 
     added.push(name || "1 person");
   }
   ctx.out(phone, { kind: "people_added", names: added.length ? added : ["nobody new"], skipped, started: trip.status !== "collecting_members" });
+}
+
+/** What the website sends when someone fills in a form. */
+export interface WebPerson {
+  name: string;
+  phone: string;
+}
+
+/**
+ * Website "+": the organizer creates a trip in one form. Nothing is texted yet: the shared pool can't text first,
+ * so the page hands them a one-tap iMessage to us, and we greet them when it arrives.
+ */
+export function createWebTrip(env: CommandEnv, input: WebPerson & { title: string; dateText: string | null }): Trip {
+  const { ctx, state } = env;
+  const phone = normalizePhone(input.phone);
+  const now = ctx.now();
+  const organizer = newMember(phone, input.name, now);
+  organizer.rsvp = "yes";
+  organizer.viaLink = true;
+  const code = makeCode(input.title, new Set(Object.values(state.trips).map((t) => t.code)));
+  const trip: Trip = {
+    id: newId("trip"), code, title: input.title, dateText: input.dateText, organizer: phone, status: "collecting_members",
+    members: { [phone]: organizer }, needs: [], log: [], createdAt: now, startedAt: null,
+  };
+  state.trips[trip.id] = trip;
+  state.phoneTrip[phone] = trip.id;
+  ctx.log(trip, "joined", `${input.name} started ${trip.title}`);
+  return trip;
+}
+
+/**
+ * Website trip link: a member types their name and number. They become a member right away (so they show on the
+ * board), and we greet them when their one-tap iMessage arrives. Returns null if the code is unknown or they opted out.
+ */
+export function joinWebTrip(env: CommandEnv, code: string, person: WebPerson): Trip | null {
+  const { ctx, state } = env;
+  const trip = Object.values(state.trips).find((t) => t.code === code.toUpperCase());
+  if (!trip) return null;
+  const phone = normalizePhone(person.phone);
+  if (Object.values(state.trips).some((t) => t.members[phone]?.optedOut)) return null; // stop is permanent
+  state.phoneTrip[phone] = trip.id;
+  if (trip.members[phone]) return trip; // tapped the link twice: same answer
+  const m = newMember(phone, person.name, ctx.now());
+  m.viaLink = true;
+  trip.members[phone] = m;
+  ctx.log(trip, "joined", `${person.name} signed up, waiting for their first text`);
+  return trip;
+}
+
+/** Their first text after signing up on the website: say hi (and that we're an AI), then carry on. */
+export function greetWebSignup(ctx: Ctx, trip: Trip, m: Member): void {
+  if (m.phone === trip.organizer) {
+    ctx.out(m.phone, { kind: "organizer_ready", name: m.name, trip: trip.title });
+    ctx.log(trip, "joined", `${m.name} is connected`);
+    return;
+  }
+  welcome(ctx, trip, m);
 }

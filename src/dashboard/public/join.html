@@ -1,0 +1,62 @@
+<!doctype html>
+<!-- The trip link: a member types their name and number, then taps once to text Roundup. Everything else is iMessage. -->
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Join on Roundup</title>
+<link rel="stylesheet" href="/web.css">
+</head>
+<body>
+<main class="sheet">
+  <div class="brand">Roundup</div>
+  <section class="card" id="card"><p class="muted">loading…</p></section>
+  <p class="fine">Roundup is an AI that plans group trips by texting each person 1:1, so the group chat stays quiet. Reply stop anytime.</p>
+</main>
+<script>
+  const esc = (s) => String(s ?? "").replace(/[&<>"]/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" }[c]));
+  const code = location.pathname.split("/").pop();
+  const card = document.getElementById("card");
+
+  async function load() {
+    const res = await fetch(`/api/trips/${encodeURIComponent(code)}`);
+    const data = await res.json().catch(() => ({}));
+    if (!res.ok) { card.innerHTML = `<p class="err">${esc(data.error || "This link doesn't work.")}</p>`; return; }
+    card.innerHTML = `
+      <p class="eyebrow">${esc(data.organizer)} invited you to</p>
+      <h1>${esc(data.title)}</h1>
+      ${data.dateText ? `<p class="muted">${esc(data.dateText)}</p>` : ""}
+      <form id="f">
+        <label>Your first name<input name="name" autocomplete="given-name" required maxlength="30"></label>
+        <label>Your phone number<input name="phone" type="tel" autocomplete="tel" required placeholder="(919) 555-0123"></label>
+        <button class="go" type="submit">Join</button>
+        <p class="err" id="err"></p>
+      </form>`;
+    document.getElementById("f").addEventListener("submit", join);
+  }
+
+  async function join(e) {
+    e.preventDefault();
+    const btn = e.target.querySelector("button");
+    btn.disabled = true; btn.textContent = "setting you up…";
+    const body = Object.fromEntries(new FormData(e.target));
+    const res = await fetch(`/api/trips/${encodeURIComponent(code)}/join`, {
+      method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body),
+    });
+    const data = await res.json().catch(() => ({}));
+    if (!res.ok) {
+      document.getElementById("err").textContent = data.error || "Something went wrong.";
+      btn.disabled = false; btn.textContent = "Join";
+      return;
+    }
+    card.innerHTML = `
+      <p class="eyebrow">one last tap</p>
+      <h1>Say hi to Roundup</h1>
+      <p class="muted">Your message is already typed. Just hit send, and Roundup takes it from there in iMessage.</p>
+      <a class="go imsg" href="${esc(data.smsLink)}">Open iMessage</a>`;
+  }
+
+  load();
+</script>
+</body>
+</html>

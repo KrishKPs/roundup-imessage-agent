@@ -38,15 +38,16 @@ export class UserRegistry {
     }
   }
 
-  /** Make sure `phone` is a registered user. Safe to call many times. */
-  async ensure(phone: Phone): Promise<void> {
-    if (this.known.has(phone)) return;
+  /** Make sure `phone` is a registered user. Safe to call many times. Resolves true if we just registered them. */
+  async ensure(phone: Phone): Promise<boolean> {
+    if (this.known.has(phone)) return false;
     let p = this.inFlight.get(phone);
     if (!p) {
       p = this.add(phone).finally(() => this.inFlight.delete(phone));
       this.inFlight.set(phone, p);
     }
     await p;
+    return true;
   }
 
   /** The bot number this person should text (shared pool gives each person their own). */
@@ -68,6 +69,7 @@ export class UserRegistry {
       const msg = shortErr(err);
       // Already registered is fine; anything else we log and still try to send.
       if (!/exist|already|duplicate/i.test(msg)) console.warn(`[registry] could not register ${maskPhone(phone)}: ${msg}`);
+      else await this.load(); // registered earlier: refresh so we know their line
     }
     this.known.add(phone);
   }

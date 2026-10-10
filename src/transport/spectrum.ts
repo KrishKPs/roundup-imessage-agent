@@ -130,6 +130,13 @@ export class SpectrumTransport implements Transport {
     return this.registry.lineFor(phone);
   }
 
+  /** Website sign-up: register the number, then reconnect so we hear their first text on a brand-new line. */
+  async prepare(phone: Phone): Promise<string | undefined> {
+    const isNew = await this.registry.ensure(phone);
+    if (isNew) void this.reconnect().catch((err) => console.error("[spectrum] reconnect failed:", err));
+    return this.registry.lineFor(phone);
+  }
+
   private async sendOnce(phone: Phone, text: string): Promise<void> {
     let space = this.spaces.get(phone);
     if (!space) {

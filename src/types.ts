@@ -36,6 +36,7 @@ export interface Member {
   lastPlan: string | null; // last plan text we sent, so updates only go to people whose plan changed
   invited?: boolean; // added by the organizer (contact card or number) rather than joining by code
   heardFrom?: boolean; // they have texted us at least once
+  viaLink?: boolean; // signed up on the website (trip link); we greet them when they first text in
 }
 
 export interface Need {
@@ -127,7 +128,8 @@ export type MessageIntent =
   | { kind: "invited"; name: string; trip: string; organizer: string; date: string | null; again?: boolean }
   | { kind: "people_added"; names: string[]; skipped: number; started: boolean }
   | { kind: "add_needs_trip" }
-  | { kind: "ask_what_planning" };
+  | { kind: "ask_what_planning" }
+  | { kind: "organizer_ready"; name: string; trip: string };
 
 export interface Outbound {
   phone: Phone;

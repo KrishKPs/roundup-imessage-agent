@@ -10,7 +10,10 @@ import type { Ask, LogKind, Member, MessageIntent, Outbound, ParsedReply, Phone,
 import { clip, normalizePhone, parseName } from "../util.js";
 import { askIntent, enqueueAsk, itemLabel, resolvePending, sendNextQueued } from "./asks.js";
 import { applyChainAnswer, newNeed, recomputeSeats, releaseCommitments, runChain } from "./chain.js";
-import { type CommandEnv, addPeople, createTrip, handleCommand, optOut, sendTripCreated, welcome } from "./commands.js";
+import {
+  type CommandEnv, type WebPerson, addPeople, createTrip, createWebTrip, greetWebSignup, handleCommand, joinWebTrip, optOut,
+  sendTripCreated, welcome,
+} from "./commands.js";
 import { type Ctx, type EngineConfig, isGoing, organizerName, seatsNeed } from "./context.js";
 import { finalize } from "./plan.js";
 import { type SeedInput, buildDemoTrip } from "./seed.js";
@@ -65,9 +68,16 @@ export class Engine {
       const m = trip?.members[phone];
       if (m?.optedOut) return; // stop is permanent: never reply again
       const firstContact = !!m?.invited && !m.heardFrom;
+      const webFirst = !!m?.viaLink && !m.heardFrom;
       if (m) {
         m.sentSinceReply = 0;
         m.heardFrom = true;
+      }
+      if (trip && m && webFirst) {
+        // Signed up on the website; this is their one-tap "hi" from the page.
+        greetWebSignup(this.ctx, trip, m);
+        this.advance(trip);
+        return;
       }
       if (trip && m && firstContact && !m.pendingAsk && (ACK_ONLY.test(body) || /^(hi|hey|hello|yo|sup|hii+)\b/i.test(body))) {
         // Added by the organizer, and this is their first text (maybe our invite never arrived).
@@ -106,6 +116,28 @@ export class Engine {
       const t = this.tripOf(phone);
       if (t) this.advance(t);
     });
+  }
+
+  /** Website "+": create a trip for the organizer. Returns its join code. */
+  async createTripFromWeb(input: WebPerson & { title: string; dateText: string | null }): Promise<string> {
+    let code = "";
+    await this.run(async () => {
+      code = createWebTrip(this.env(), input).code;
+    });
+    return code;
+  }
+
+  /** Website trip link: sign a member up. Returns the trip title, or null if the code is unknown or they opted out. */
+  async joinFromWeb(code: string, person: WebPerson): Promise<string | null> {
+    let title: string | null = null;
+    await this.run(async () => {
+      title = joinWebTrip(this.env(), code, person)?.title ?? null;
+    });
+    return title;
+  }
+
+  private env(): CommandEnv {
+    return { ctx: this.ctx, state: this.state, resetState: () => this.deps.store.reset() };
   }
 
   /** Called every 15 seconds: nudges, give-ups, and time-based progress. */

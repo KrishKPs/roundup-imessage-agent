@@ -18,6 +18,8 @@ const schema = z.object({
   DEMO_MODE: boolish,
   AGENT_NUMBER: z.string().optional().default(""), // the number people text; used for tap-to-join links
   IMESSAGE_MODE: z.enum(["cloud", "local"]).default("cloud"), // local = this Mac's Messages app (can text people first)
+  PUBLIC_URL: z.string().optional().default(""), // fixed public address for the website; blank = use the tunnel
+  TUNNEL: boolish, // start a free cloudflared tunnel so trip links open on phones
   DEDICATED_LINE: z.string().optional().transform((v) => (v ?? "false").toLowerCase() === "true"),
 });
 

@@ -52,7 +52,12 @@ export function listNames(names: string[]): string {
 
 /** A link that opens Messages to the agent with "join CODE" already typed (iOS). */
 export function joinLink(agentNumber: string, code: string): string {
-  return `sms:${agentNumber}&body=${encodeURIComponent(`join ${code}`)}`;
+  return smsLink(agentNumber, `join ${code}`);
+}
+
+/** A link that opens Messages to `number` with `body` already typed (iPhone format). */
+export function smsLink(number: string, body: string): string {
+  return `sms:${number}&body=${encodeURIComponent(body)}`;
 }
 
 /** Trim and hard-cap to 160 characters (voice rule). */

@@ -63,11 +63,15 @@
   #qr { background: #fff; padding: 10px; border-radius: 14px; box-shadow: 0 6px 16px rgba(30,110,160,.2); }
   #qr img, #qr canvas { display: block; }
   .scan { font-size: 15px; color: var(--muted); max-width: 120px; }
+  .plus { position: fixed; right: 22px; bottom: 22px; width: 64px; height: 64px; border-radius: 50%; display: grid; place-items: center;
+          font: 300 42px/1 system-ui; color: #fff; text-decoration: none; z-index: 5;
+          background: linear-gradient(180deg, #5fd08a, #2ea85c); box-shadow: inset 0 2px 0 rgba(255,255,255,.5), 0 8px 20px rgba(46,168,92,.4); }
 </style>
 <script src="qrcode.min.js"></script>
 </head>
 <body>
-<main id="app"><div class="card empty">waiting for a trip… text <b>new trip Beach day</b> to start</div></main>
+<main id="app"><div class="card empty">no trip yet. tap <b>+</b> to start one</div></main>
+<a class="plus" href="/new" title="New trip" aria-label="New trip">+</a>
 <script>
   const esc = (s) => String(s ?? "").replace(/[&<>"]/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" }[c]));
   const statusLabel = { in: "in", out: "out", maybe: "maybe", waiting: "waiting", opted_out: "opted out" };
@@ -77,7 +81,7 @@
 
   function render(t) {
     const app = document.getElementById("app");
-    if (!t) { app.innerHTML = '<div class="card empty">waiting for a trip… text <b>new trip Beach day</b> to start</div>'; return; }
+    if (!t) { app.innerHTML = '<div class="card empty">no trip yet. tap <b>+</b> to start one</div>'; return; }
     const needs = t.needs.length ? t.needs.map((n) => {
       const pct = n.needed ? Math.min(100, Math.round((n.filled / n.needed) * 100)) : 0;
       const label = n.kind === "seats" ? `Seats ${n.filled} / ${n.needed}` : `${n.label[0].toUpperCase() + n.label.slice(1)} ${n.filled} / ${n.needed}`;
@@ -89,7 +93,7 @@
     app.innerHTML = `
       <header class="card">
         <div><h1>${esc(t.title)}</h1><div class="sub">${t.dateText ? esc(t.dateText) + " · " : ""}organized by ${esc(t.organizer)} · <span class="status">${tripStatus[t.status]}</span></div></div>
-        <div class="join">${t.joinLink ? '<div class="scan">scan with your iPhone camera to join</div><div id="qr"></div>' : ""}<div class="code"><small>TEXT TO JOIN</small>join ${esc(t.code)}</div></div>
+        <div class="join">${t.joinUrl || t.joinLink ? '<div class="scan">scan with your iPhone camera to join</div><div id="qr"></div>' : ""}${t.joinUrl ? "" : `<div class="code"><small>TEXT TO JOIN</small>join ${esc(t.code)}</div>`}</div>
       </header>
       <section class="card" style="grid-column:1/-1"><h2>People</h2><div class="chips">
         ${t.members.map((m) => `<span class="chip ${m.status}">${esc(m.name)}<span class="s">${statusLabel[m.status]}</span></span>`).join("")}
@@ -106,10 +110,16 @@
     drawQr(t);
   }
 
-  // SMSTO: opens Messages to the agent with "join CODE" typed (iPhone camera understands it).
+  // The trip link when the website is public (each person gets their own bot number there).
+  // Otherwise SMSTO: opens Messages to the agent with "join CODE" typed (dedicated line only).
   function drawQr(t) {
     const el = document.getElementById("qr");
-    if (!el || !t.joinLink || typeof QRCode === "undefined") return;
+    if (!el || typeof QRCode === "undefined") return;
+    if (t.joinUrl) {
+      new QRCode(el, { text: t.joinUrl, width: 132, height: 132, correctLevel: QRCode.CorrectLevel.M });
+      return;
+    }
+    if (!t.joinLink) return;
     const number = t.joinLink.slice(4, t.joinLink.indexOf("&"));
     new QRCode(el, { text: `SMSTO:${number}:join ${t.code}`, width: 132, height: 132, correctLevel: QRCode.CorrectLevel.M });
   }

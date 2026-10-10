@@ -8,6 +8,8 @@ import { makePhraser } from "./llm/phrase.js";
 import { makeUnderstander } from "./llm/understand.js";
 import { makeTripExtractor } from "./llm/tripRequest.js";
 import { Store } from "./store.js";
+import type { Transport } from "./transport/transport.js";
+import { startTunnel } from "./tunnel.js";
 
 const cfg = loadConfig();
 const store = new Store("data/state.json");
@@ -40,6 +42,8 @@ const engine = new Engine({
   extractTrip: makeTripExtractor(understandLlm),
 });
 
+const tunnel = cfg.TUNNEL && !cfg.PUBLIC_URL ? startTunnel(cfg.PORT) : null;
+
 dashboard = startDashboard({
   port: cfg.PORT,
   getState: () => store.state,
@@ -57,6 +61,12 @@ dashboard = startDashboard({
     });
   },
   onReset: () => engine.reset(),
+  web: {
+    createTrip: (input) => engine.createTripFromWeb(input),
+    join: (code, person) => engine.joinFromWeb(code, person),
+    prepare: async (phone) => (await (transport as Transport).prepare?.(phone)) || cfg.AGENT_NUMBER || undefined,
+    publicUrl: () => cfg.PUBLIC_URL.replace(/\/$/, "") || tunnel?.url,
+  },
 });
 
 const timer = setInterval(() => void engine.tick(), 15_000);
@@ -66,6 +76,7 @@ async function shutdown() {
   clearInterval(timer);
   await Promise.race([engine.idle(), new Promise((r) => setTimeout(r, 8000))]); // finish the reply in progress
   dashboard?.server.close();
+  tunnel?.stop();
   await transport.stop().catch(() => undefined);
   process.exit(0);
 }

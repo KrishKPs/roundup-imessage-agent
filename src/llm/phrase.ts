@@ -66,6 +66,7 @@ export function template(i: MessageIntent): string {
     case "invited": return `hey${i.name ? ` ${i.name}` : ""}!${i.again ? " (sending again in case this got lost)" : ""} ${i.organizer} added you to ${i.trip}${i.date ? ` (${i.date})` : ""}. i'm Roundup, an AI helping plan it 1:1 so the group chat stays quiet. reply stop anytime.`;
     case "people_added": return `added ${listNames(i.names)}, texting them now${i.skipped ? ` (skipped ${i.skipped} already in or opted out)` : ""}. ${i.started ? "they'll get the questions now." : "send more anytime, or say start when everyone's in."}`;
     case "ask_what_planning": return "hey! i'm Roundup, an AI that plans group trips over text. what are you planning, and when? anything works. got a code from a friend? just send it.";
+    case "organizer_ready": return `hey ${i.name}! i'm Roundup, an AI planning ${i.trip} with you. share your link in the group chat, then text start when everyone's in.`;
     case "add_needs_trip": return "start a trip first, then send me contacts. tell me what and when, like \"camping trip saturday\".";
   }
 }

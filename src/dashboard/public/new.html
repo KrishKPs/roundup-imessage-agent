@@ -1,0 +1,62 @@
+<!doctype html>
+<!-- "+ new trip": the organizer fills one form, taps once to text Roundup, and gets one link for the group chat. -->
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>New trip · Roundup</title>
+<link rel="stylesheet" href="/web.css">
+</head>
+<body>
+<main class="sheet">
+  <div class="brand">Roundup</div>
+  <section class="card" id="card">
+    <p class="eyebrow">new trip</p>
+    <h1>What are you planning?</h1>
+    <form id="f">
+      <label>Trip name<input name="title" required maxlength="60" placeholder="Beach day"></label>
+      <label>When <span style="font-weight:400">(optional)</span><input name="date" maxlength="40" placeholder="Saturday"></label>
+      <label>Your first name<input name="name" autocomplete="given-name" required maxlength="30"></label>
+      <label>Your phone number<input name="phone" type="tel" autocomplete="tel" required placeholder="(919) 555-0123"></label>
+      <button class="go" type="submit">Create trip</button>
+      <p class="err" id="err"></p>
+    </form>
+  </section>
+  <p class="fine">Roundup texts each person 1:1 in iMessage, so nobody has to download anything and the group chat stays quiet.</p>
+</main>
+<script>
+  const esc = (s) => String(s ?? "").replace(/[&<>"]/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" }[c]));
+  const card = document.getElementById("card");
+
+  document.getElementById("f").addEventListener("submit", async (e) => {
+    e.preventDefault();
+    const btn = e.target.querySelector("button");
+    btn.disabled = true; btn.textContent = "creating…";
+    const body = Object.fromEntries(new FormData(e.target));
+    const res = await fetch("/api/trips", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body) });
+    const data = await res.json().catch(() => ({}));
+    if (!res.ok) {
+      document.getElementById("err").textContent = data.error || "Something went wrong.";
+      btn.disabled = false; btn.textContent = "Create trip";
+      return;
+    }
+    const invite = `${body.name} is planning ${body.title}! tap to join, Roundup (an AI) sorts out the details with you 1:1: ${data.joinUrl}`;
+    card.innerHTML = `
+      <p class="eyebrow">${esc(body.title)} is ready</p>
+      <h1>Two taps and you're done</h1>
+      <div class="step"><b>1</b>Connect your phone to Roundup</div>
+      <a class="go imsg" href="${esc(data.smsLink)}">Text Roundup</a>
+      <div class="step"><b>2</b>Send this link to your group chat</div>
+      <div class="linkbox">${esc(data.joinUrl)}</div>
+      ${navigator.share ? '<button class="go" id="share" style="margin-top:12px">Share link</button>' : ""}
+      <button class="ghost" id="copy">Copy invite</button>
+      <p class="muted" style="margin-top:16px">When everyone's in, text <b>start</b> to Roundup.</p>`;
+    document.getElementById("share")?.addEventListener("click", () => navigator.share({ text: invite }).catch(() => undefined));
+    document.getElementById("copy").addEventListener("click", async (ev) => {
+      try { await navigator.clipboard.writeText(invite); ev.target.textContent = "Copied!"; }
+      catch { ev.target.textContent = "Couldn't copy, long-press the link above"; }
+    });
+  });
+</script>
+</body>
+</html>
