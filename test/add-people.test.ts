@@ -94,7 +94,7 @@ describe("invite can't be delivered", () => {
     await h.say(org, "camping trip saturday");
     await h.say(org, "Hasti");
     await h.engine.handleContacts(org, [{ name: "Khush", phone: khush }]);
-    expect(h.transport.to(org).join(" ")).toMatch(/couldn't text Khush directly yet. ask them to text "hi" to \+16282647648/);
+    expect(h.transport.to(org).join(" ")).toMatch(/hey Khush! i'm planning .* text "hi" to \+16282647648 to join/);
 
     blocked.done = true; // inbound always works: Khush texts the bot first
     await h.say(khush, "hi");

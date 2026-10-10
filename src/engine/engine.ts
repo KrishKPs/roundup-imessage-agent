@@ -431,18 +431,24 @@ export class Engine {
     }
   }
 
-  /** We couldn't text an invitee first. Ask the organizer to have them text us (that always works). */
+  /**
+   * We couldn't text an invitee first (shared pool). Their number is already registered, so it only needs them to
+   * text in once. Give the organizer a ready-made invite as its own message, easy to copy and forward.
+   */
   private async inviteFailed(phone: Phone, name: string): Promise<void> {
     const trip = this.tripOf(phone);
     if (!trip) return;
-    const line = this.deps.transport.lineFor?.(phone);
+    const line = this.deps.transport.lineFor?.(phone) || this.ctx.cfg.agentNumber;
     const who = name || "them";
-    const text = clip(line
-      ? `couldn't text ${who} directly yet. ask ${name ? "them" : "them"} to text "hi" to ${line} and i'll take it from there.`
-      : `couldn't text ${who} directly yet. ask them to text "hi" to me and i'll take it from there.`);
-    this.log(trip, "handoff", `couldn't reach ${name || "an invitee"}, asked ${organizerName(trip)} to have them text in`);
+    const org = organizerName(trip);
+    const heads = clip(`i can't text ${who} first, but they're all set up. copy the next message and send it to them:`);
+    const invite = clip(line
+      ? `hey${name ? ` ${name}` : ""}! i'm planning ${trip.title} with Roundup, an AI that sorts it out 1:1. text "hi" to ${line} to join`
+      : `hey${name ? ` ${name}` : ""}! i'm planning ${trip.title} with Roundup, an AI that sorts it out 1:1. text "hi" to the Roundup number to join`);
+    this.log(trip, "handoff", `couldn't reach ${name || "an invitee"}, gave ${org} an invite to forward`);
     try {
-      await this.deps.transport.send(trip.organizer, text);
+      await this.deps.transport.send(trip.organizer, heads);
+      await this.deps.transport.send(trip.organizer, invite);
     } catch (err) {
       console.error(`[engine] could not tell organizer: ${(err as Error).message}`);
     }
