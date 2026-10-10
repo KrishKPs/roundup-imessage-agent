@@ -17,6 +17,7 @@ const schema = z.object({
   GIVE_UP_AFTER_SECONDS: z.coerce.number().positive().default(240),
   DEMO_MODE: boolish,
   AGENT_NUMBER: z.string().optional().default(""), // the number people text; used for tap-to-join links
+  IMESSAGE_MODE: z.enum(["cloud", "local"]).default("cloud"), // local = this Mac's Messages app (can text people first)
   DEDICATED_LINE: z.string().optional().transform((v) => (v ?? "false").toLowerCase() === "true"),
 });
 
@@ -25,7 +26,7 @@ export type Config = z.infer<typeof schema>;
 /** Load config. With `requireSpectrum: false` (simulator, seed) the Spectrum keys may be blank. */
 export function loadConfig(opts: { requireSpectrum: boolean } = { requireSpectrum: true }): Config {
   const env = { ...process.env };
-  if (!opts.requireSpectrum) {
+  if (!opts.requireSpectrum || env.IMESSAGE_MODE === "local") { // local mode needs no Photon keys
     env.SPECTRUM_PROJECT_ID ||= "unused";
     env.SPECTRUM_PROJECT_SECRET ||= "unused";
   }

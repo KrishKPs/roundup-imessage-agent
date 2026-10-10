@@ -6,6 +6,7 @@ export interface EngineConfig {
   giveUpAfterMs: number;
   demoMode: boolean;
   agentNumber?: string; // E.164; enables tap-to-join links in invites
+  quietToStrangers?: boolean; // local mode on a personal account: ignore non-trip texts from unknown people
   dedicatedLine?: boolean; // one number for everyone, no allowlist: join by link/QR instead of organizer adding people
 }
 

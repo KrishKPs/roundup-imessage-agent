@@ -146,6 +146,7 @@ export class Engine {
     const awaiting = (this.state.awaitingPlan ??= {});
     const fromLlm = this.deps.extractTrip ? await this.deps.extractTrip(body) : null;
     if (fromLlm) return createTrip(env, phone, fromLlm.title, fromLlm.dateText);
+    if (this.ctx.cfg.quietToStrangers) return; // probably a personal text to this Mac's account: stay out of it
     if (awaiting[phone] && !/^(hi|hey|hello|yo|sup|hii+|hey there)[!.\s]*$/i.test(body)) {
       const req = titleFromAnything(body);
       return createTrip(env, phone, req.title, req.dateText);

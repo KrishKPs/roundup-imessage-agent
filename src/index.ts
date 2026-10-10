@@ -8,15 +8,18 @@ import { makePhraser } from "./llm/phrase.js";
 import { makeUnderstander } from "./llm/understand.js";
 import { makeTripExtractor } from "./llm/tripRequest.js";
 import { Store } from "./store.js";
-import { SpectrumTransport } from "./transport/spectrum.js";
 
 const cfg = loadConfig();
 const store = new Store("data/state.json");
 const understandLlm = makeGemini(cfg.GEMINI_API_KEY, cfg.GEMINI_MODEL, 5000);
 const phraseLlm = makeGemini(cfg.GEMINI_API_KEY, cfg.GEMINI_MODEL, 2500); // shorter: replies must land in < 4 s
 
-console.log("[spectrum] connecting...");
-const transport = await SpectrumTransport.connect(cfg.SPECTRUM_PROJECT_ID, cfg.SPECTRUM_PROJECT_SECRET);
+// cloud = Photon's managed lines; local = this Mac's Messages app (can text people first). Both are Spectrum.
+const local = cfg.IMESSAGE_MODE === "local";
+console.log(`[spectrum] connecting (${local ? "local Messages app on this Mac" : "Photon cloud"})...`);
+const transport = local
+  ? await (await import("./transport/local.js")).LocalTransport.connect()
+  : await (await import("./transport/spectrum.js")).SpectrumTransport.connect(cfg.SPECTRUM_PROJECT_ID, cfg.SPECTRUM_PROJECT_SECRET);
 console.log("[spectrum] connected. Text the agent's number to begin.");
 
 let dashboard: ReturnType<typeof startDashboard> | null = null;
@@ -31,6 +34,7 @@ const engine = new Engine({
     demoMode: cfg.DEMO_MODE,
     agentNumber: cfg.AGENT_NUMBER,
     dedicatedLine: cfg.DEDICATED_LINE,
+    quietToStrangers: local,
   },
   onChange: () => dashboard?.broadcast(),
   extractTrip: makeTripExtractor(understandLlm),
