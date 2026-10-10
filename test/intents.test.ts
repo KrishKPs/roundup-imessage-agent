@@ -44,3 +44,22 @@ describe("loose phrasing", () => {
     expect(h.trip().members[phoneFor(1)].name).toBe("Sam");
   });
 });
+
+describe("strangers never hit a dead end", () => {
+  it("unclear first message -> asked what they're planning -> any reply becomes the trip", async () => {
+    const h = harness();
+    await h.say(phoneFor(0), "hey");
+    expect(h.transport.to(phoneFor(0)).at(-1)).toMatch(/what are you planning/);
+    await h.say(phoneFor(0), "spring break plans w the crew next weekend");
+    expect(h.trip().title).toBe("Spring break crew");
+    expect(h.trip().dateText).toBe("next weekend");
+  });
+
+  it("uses Gemini's reading when available", async () => {
+    const h = harness();
+    // swap in a fake extractor: same shape as the real Gemini one
+    (h.engine as unknown as { deps: { extractTrip: unknown } }).deps.extractTrip = async () => ({ title: "Six Flags day", dateText: "next saturday" });
+    await h.say(phoneFor(0), "gonna go to six flags next saturday with the boys");
+    expect(h.trip().title).toBe("Six Flags day");
+  });
+});

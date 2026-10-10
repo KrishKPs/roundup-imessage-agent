@@ -2,13 +2,15 @@
 // Events run one at a time (a simple promise lock), so state never changes under our feet.
 import type { Phraser } from "../llm/phrase.js";
 import type { Understander } from "../llm/understand.js";
+import type { TripExtractor } from "../llm/tripRequest.js";
+import { titleFromAnything } from "./intents.js";
 import type { Store } from "../store.js";
 import type { Transport } from "../transport/transport.js";
 import type { Ask, LogKind, Member, MessageIntent, Outbound, ParsedReply, Phone, Trip } from "../types.js";
 import { clip, normalizePhone, parseName } from "../util.js";
 import { askIntent, enqueueAsk, itemLabel, resolvePending, sendNextQueued } from "./asks.js";
 import { applyChainAnswer, newNeed, recomputeSeats, releaseCommitments, runChain } from "./chain.js";
-import { type CommandEnv, addPeople, handleCommand, optOut, sendTripCreated, welcome } from "./commands.js";
+import { type CommandEnv, addPeople, createTrip, handleCommand, optOut, sendTripCreated, welcome } from "./commands.js";
 import { type Ctx, type EngineConfig, isGoing, organizerName, seatsNeed } from "./context.js";
 import { finalize } from "./plan.js";
 import { type SeedInput, buildDemoTrip } from "./seed.js";
@@ -22,6 +24,8 @@ export interface EngineDeps {
   cfg: EngineConfig;
   now?: () => number;
   onChange?: () => void;
+  /** Optional Gemini reader for free-text "let's plan X" messages. */
+  extractTrip?: TripExtractor;
 }
 
 const QUESTION_KINDS = new Set<MessageIntent["kind"]>([
@@ -65,7 +69,7 @@ export class Engine {
         return;
       }
       if (!trip || !m) {
-        this.ctx.out(phone, { kind: "help" });
+        await this.stranger(env, phone, body);
         return;
       }
       await this.handleReply(trip, m, body);
@@ -116,6 +120,22 @@ export class Engine {
   /** DEMO_MODE: wipe everything. */
   reset(): Promise<void> {
     return this.run(async () => this.deps.store.reset());
+  }
+
+  /**
+   * Someone not in any trip, whose message the keyword rules couldn't place.
+   * Gemini gets a look first; otherwise we ask what they're planning and take their next reply as the title.
+   */
+  private async stranger(env: CommandEnv, phone: Phone, body: string): Promise<void> {
+    const awaiting = (this.state.awaitingPlan ??= {});
+    const fromLlm = this.deps.extractTrip ? await this.deps.extractTrip(body) : null;
+    if (fromLlm) return createTrip(env, phone, fromLlm.title, fromLlm.dateText);
+    if (awaiting[phone] && !/^(hi|hey|hello|yo|sup|hii+|hey there)[!.\s]*$/i.test(body)) {
+      const req = titleFromAnything(body);
+      return createTrip(env, phone, req.title, req.dateText);
+    }
+    awaiting[phone] = this.ctx.now();
+    this.ctx.out(phone, { kind: "ask_what_planning" });
   }
 
   // ---------------------------------------------------------------- replies

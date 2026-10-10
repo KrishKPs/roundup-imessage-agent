@@ -130,7 +130,7 @@ export function handleCommand(env: CommandEnv, phone: Phone, text: string): bool
   return true;
 }
 
-function createTrip(env: CommandEnv, phone: Phone, title: string, dateText: string | null): void {
+export function createTrip(env: CommandEnv, phone: Phone, title: string, dateText: string | null): void {
   const { ctx, state } = env;
   const now = ctx.now();
   const code = makeCode(title, new Set(Object.values(state.trips).map((t) => t.code)));
@@ -143,6 +143,7 @@ function createTrip(env: CommandEnv, phone: Phone, title: string, dateText: stri
   };
   state.trips[trip.id] = trip;
   state.phoneTrip[phone] = trip.id;
+  if (state.awaitingPlan) delete state.awaitingPlan[phone];
   if (name) sendTripCreated(ctx, trip);
   else enqueueAsk(ctx, trip, organizer, "name");
 }

@@ -6,6 +6,7 @@ import { Engine } from "./engine/engine.js";
 import { makeGemini } from "./llm/gemini.js";
 import { makePhraser } from "./llm/phrase.js";
 import { makeUnderstander } from "./llm/understand.js";
+import { makeTripExtractor } from "./llm/tripRequest.js";
 import { Store } from "./store.js";
 import { SpectrumTransport } from "./transport/spectrum.js";
 
@@ -31,6 +32,7 @@ const engine = new Engine({
     agentNumber: cfg.AGENT_NUMBER,
   },
   onChange: () => dashboard?.broadcast(),
+  extractTrip: makeTripExtractor(understandLlm),
 });
 
 dashboard = startDashboard({

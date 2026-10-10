@@ -86,6 +86,7 @@ export interface ParsedReply {
 export interface State {
   trips: Record<string, Trip>;
   phoneTrip: Record<Phone, string>; // which trip a phone is currently part of
+  awaitingPlan?: Record<Phone, number>; // strangers we asked "what are you planning?"
 }
 
 // A structured "say this" instruction. llm/phrase.ts turns it into one text.
@@ -124,7 +125,8 @@ export type MessageIntent =
   | { kind: "all_set" }
   | { kind: "invited"; name: string; trip: string; organizer: string; date: string | null }
   | { kind: "people_added"; names: string[]; skipped: number; started: boolean }
-  | { kind: "add_needs_trip" };
+  | { kind: "add_needs_trip" }
+  | { kind: "ask_what_planning" };
 
 export interface Outbound {
   phone: Phone;

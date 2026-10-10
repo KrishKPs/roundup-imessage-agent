@@ -9,6 +9,7 @@ const FILLER = new Set([
   "organize", "organizing", "start", "starting", "create", "make", "our", "my", "this", "next", "for", "us", "we",
   "are", "going", "on", "quick", "group", "little", "hey", "hi", "hello", "yo", "so", "can", "you", "help", "me",
   "with", "do", "a", "doing", "some", "kind", "of", "like", "maybe", "around", "about", "thinking",
+  "we're", "were", "putting", "together", "set", "up", "gonna", "go", "u", "should", "need", "bunch", "friends", "w",
 ]);
 const DAY = "(?:mon|tues|wednes|thurs|fri|satur|sun)day";
 const MONTH = "(?:jan|feb|mar|apr|may|jun|jul|aug|sep|sept|oct|nov|dec)[a-z]*";
@@ -71,6 +72,18 @@ export function parseTripRequest(raw: string): TripRequest | null {
   const activity = ACTIVITY_WORDS.find((a) => new RegExp(`\\b${a}\\b`).test(withoutDate));
   if (activity) return { title: `${cap(activity)} trip`, dateText };
   return null;
+}
+
+/** Turn any reply to "what are you planning?" into a short title. Never fails. */
+export function titleFromAnything(raw: string): TripRequest {
+  const parsed = parseTripRequest(raw);
+  if (parsed) return parsed;
+  const lower = raw.toLowerCase().replace(/[’]/g, "'");
+  const dateText = parseDate(lower);
+  const words = (dateText ? lower.replace(DATE_RE, " ") : lower)
+    .replace(/[^\p{L}\p{N}\s'-]/gu, " ").split(/\s+/).filter((w) => w && !FILLER.has(w));
+  const title = cap(words.slice(0, 4).join(" ")) || "Group plan";
+  return { title: title.slice(0, 40), dateText };
 }
 
 /** A join code anywhere in the message: "BEACH7", "join beach7", "can i join BEACH7?" */
