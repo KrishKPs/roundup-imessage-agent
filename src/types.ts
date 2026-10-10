@@ -14,6 +14,17 @@ export interface Trip {
   log: LogEvent[];
   createdAt: number;
   startedAt: number | null; // addition: when `start` was sent (drives the seats-chain timeout)
+  poll?: Poll | null; // addition: the organizer's latest "ask everyone ..." question
+}
+
+/** "ask everyone does 10am saturday work?": asked 1:1, tallied, reported back to the organizer. */
+export interface Poll {
+  id: string;
+  question: string;
+  askedAt: number;
+  asked: Phone[];
+  answers: Record<Phone, "yes" | "no" | "maybe">;
+  reported: boolean;
 }
 
 export interface Member {
@@ -55,12 +66,13 @@ export interface Need {
   shortNotified: number | null; // shortfall we last told the organizer about, to avoid repeats
 }
 
-export type AskTopic = "name" | "rsvp" | "budget" | "drive" | "seats" | "item";
+export type AskTopic = "name" | "rsvp" | "budget" | "drive" | "seats" | "item" | "poll";
 
 export interface Ask {
   id: string;
   topic: AskTopic; // "name" and "seats" are additions: name capture and the "how many seats?" follow-up
   needId: string | null;
+  pollId?: string; // topic "poll": which organizer question this is
   askedAt: number; // 0 while still queued
   nudged: boolean;
 }
@@ -129,7 +141,9 @@ export type MessageIntent =
   | { kind: "people_added"; names: string[]; skipped: number; started: boolean }
   | { kind: "add_needs_trip" }
   | { kind: "ask_what_planning" }
-  | { kind: "organizer_ready"; name: string; trip: string };
+  | { kind: "organizer_ready"; name: string; trip: string }
+  | { kind: "ask_poll"; organizer: string; question: string }
+  | { kind: "organizer_help" };
 
 export interface Outbound {
   phone: Phone;

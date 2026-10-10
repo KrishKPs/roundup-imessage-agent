@@ -5,6 +5,7 @@ import { enqueueAsk } from "./asks.js";
 import { newNeed, releaseCommitments } from "./chain.js";
 import { type Ctx, goingMembers, organizerName, seatsNeed } from "./context.js";
 import { budgetAnsweredCount, finalize } from "./plan.js";
+import { parsePollRequest, pollSummary, startPoll } from "./poll.js";
 import { findJoinCode, organizerVerb, parsePeople, parseTripRequest, textAfterCode } from "./intents.js";
 
 export function newMember(phone: Phone, name: string, now: number): Member {
@@ -86,6 +87,13 @@ export function handleCommand(env: CommandEnv, phone: Phone, text: string): bool
       createTrip(env, phone, req.title, req.dateText);
       return true;
     }
+  }
+
+  const pollQuestion = trip?.members[phone] ? parsePollRequest(t) : null;
+  if (pollQuestion && trip) {
+    if (!isOrganizer) ctx.out(phone, { kind: "not_organizer", organizer: organizerName(trip) });
+    else startPoll(ctx, trip, pollQuestion);
+    return true;
   }
 
   const verb = organizerVerb(t);
@@ -217,7 +225,8 @@ export function statusText(trip: Trip): string {
   for (const n of trip.needs.filter((x) => x.kind === "item")) parts.push(`${n.label} ${n.status === "filled" ? "covered" : "open"}`);
   const b = budgetAnsweredCount(trip);
   parts.push(`budget ${b.answered}/${b.total} answered`);
-  return `${parts.join(", ")}.`;
+  const poll = trip.poll ? ` ${pollSummary(trip)}` : "";
+  return `${parts.join(", ")}.${poll}`;
 }
 
 /**

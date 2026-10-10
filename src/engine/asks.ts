@@ -6,9 +6,9 @@ import { type Ctx, isGoing, organizerName } from "./context.js";
 /** A member who got 2 questions/nudges with no reply is not sent more until they reply. */
 export const MAX_UNANSWERED = 2;
 
-export function enqueueAsk(ctx: Ctx, trip: Trip, m: Member, topic: AskTopic, needId: string | null = null): void {
+export function enqueueAsk(ctx: Ctx, trip: Trip, m: Member, topic: AskTopic, needId: string | null = null, pollId?: string): void {
   if (m.optedOut) return;
-  const ask: Ask = { id: newId("ask"), topic, needId, askedAt: 0, nudged: false };
+  const ask: Ask = { id: newId("ask"), topic, needId, askedAt: 0, nudged: false, ...(pollId ? { pollId } : {}) };
   m.askQueue.push(ask);
   sendNextQueued(ctx, trip, m);
 }
@@ -49,6 +49,7 @@ export function cancelAsksFor(ctx: Ctx, trip: Trip, m: Member, needId: string): 
 function stillRelevant(trip: Trip, m: Member, ask: Ask): boolean {
   if (ask.topic === "rsvp") return m.rsvp === "unknown";
   if (ask.topic === "budget") return isGoing(m) && m.budgetCap === null;
+  if (ask.topic === "poll") return trip.poll?.id === ask.pollId && !(m.phone in trip.poll!.answers);
   if (ask.needId) {
     const need = trip.needs.find((n) => n.id === ask.needId);
     return !!need && need.status !== "filled" && need.waitingOn === m.phone;
@@ -69,6 +70,7 @@ export function askIntent(trip: Trip, m: Member, ask: Ask): MessageIntent {
     case "drive": return { kind: "ask_drive", name: m.name, trip: trip.title };
     case "seats": return { kind: "ask_seats", name: m.name };
     case "item": return { kind: "ask_item", name: m.name, item: need?.label ?? "something", trip: trip.title };
+    case "poll": return { kind: "ask_poll", organizer: organizerName(trip), question: trip.poll?.question ?? "does the plan work for you?" };
   }
 }
 

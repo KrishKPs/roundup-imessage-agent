@@ -14,6 +14,7 @@ const SIMPLE_QUESTION: Record<AskTopic, string> = {
   drive: "can you drive? yes or no works",
   seats: "how many seats in your car, including you? just a number",
   item: "can you bring it? yes or no works",
+  poll: "does it work for you? yes, no, or maybe",
 };
 
 /** The fixed wording for every intent. Used directly, or as the draft for Gemini. */
@@ -67,6 +68,8 @@ export function template(i: MessageIntent): string {
     case "people_added": return `added ${listNames(i.names)}, texting them now${i.skipped ? ` (skipped ${i.skipped} already in or opted out)` : ""}. ${i.started ? "they'll get the questions now." : "send more anytime, or say start when everyone's in."}`;
     case "ask_what_planning": return "hey! i'm Roundup, an AI that plans group trips over text. what are you planning, and when? anything works. got a code from a friend? just send it.";
     case "organizer_ready": return `hey ${i.name}! i'm Roundup, an AI planning ${i.trip} with you. share your link in the group chat, then text start when everyone's in.`;
+    case "ask_poll": return `quick q from ${i.organizer}: ${i.question} yes, no, or maybe`;
+    case "organizer_help": return `i can ask everyone for you, just text "ask everyone" and your question. or text status, start, or need cooler.`;
     case "add_needs_trip": return "start a trip first, then send me contacts. tell me what and when, like \"camping trip saturday\".";
   }
 }
@@ -75,6 +78,7 @@ function topicLabel(topic: AskTopic, item: string | null): string {
   if (topic === "item") return `bringing a ${item ?? "thing"}`;
   if (topic === "drive" || topic === "seats") return "driving";
   if (topic === "budget") return "their budget";
+  if (topic === "poll") return "your question";
   return "whether they're coming";
 }
 

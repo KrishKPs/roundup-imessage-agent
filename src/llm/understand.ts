@@ -52,7 +52,7 @@ export function keywordParse(raw: string, topic: AskTopic | null): ParsedReply {
   const num = firstNumber(t);
 
   if (DROP.test(t)) {
-    const r = blank(0.9, topic === "rsvp" ? "answer" : "drop");
+    const r = blank(0.9, topic === "rsvp" || topic === "poll" ? "answer" : "drop");
     r.rsvp = "no";
     return r;
   }
@@ -60,6 +60,7 @@ export function keywordParse(raw: string, topic: AskTopic | null): ParsedReply {
   const carHint = CAR.test(t) ? true : NO_DRIVE.test(t) ? false : null;
 
   switch (topic) {
+    case "poll":
     case "rsvp": {
       const r = blank(short ? 0.9 : 0.5);
       if (maybe) r.rsvp = "maybe";

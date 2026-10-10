@@ -8,6 +8,7 @@ const TOPIC_QUESTION: Record<AskTopic, string> = {
   drive: "Can you drive, and how many seats does your car have including you?",
   seats: "How many seats does your car have, including you?",
   item: "Can you bring the item we asked about?",
+  poll: "Does the organizer's suggestion work for you? (yes / no / maybe)",
 };
 
 export function understandPrompt(text: string, topic: AskTopic | null): string {

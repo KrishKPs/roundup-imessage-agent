@@ -17,6 +17,7 @@ import {
 import { type Ctx, type EngineConfig, isGoing, organizerName, seatsNeed } from "./context.js";
 import { finalize } from "./plan.js";
 import { type SeedInput, buildDemoTrip } from "./seed.js";
+import { recordPollAnswer } from "./poll.js";
 import { checkSilence } from "./timers.js";
 
 export interface EngineDeps {
@@ -243,6 +244,13 @@ export class Engine {
       return;
     }
 
+    if (ask.topic === "poll") {
+      const value = parsed.rsvp ?? (parsed.itemYes === null ? "maybe" : parsed.itemYes ? "yes" : "no");
+      recordPollAnswer(ctx, trip, m, ask, value); // thank them before any next question
+      close();
+      return;
+    }
+
     if (ask.topic === "budget") {
       m.budgetCap = parsed.budgetCap;
       ctx.out(m.phone, { kind: "ack", topic: "budget", value: parsed.budgetCap === null ? "skip" : "done" });
@@ -303,6 +311,12 @@ export class Engine {
   /** Answer only from trip facts; anything else goes to the organizer. Then repeat the open question. */
   private answerQuestion(trip: Trip, m: Member, text: string): void {
     const ctx = this.ctx;
+    if (m.phone === trip.organizer) {
+      // The organizer isn't asking us about their own trip; show them what we can do for them.
+      ctx.out(m.phone, { kind: "organizer_help" });
+      if (m.pendingAsk) ctx.out(m.phone, askIntent(trip, m, m.pendingAsk));
+      return;
+    }
     // "what's the plan?", "when is it?", "who's going?" are answered from trip facts. Anything else goes to the organizer.
     const basic = /\b(plan|what('?s| is) (this|up|happening|going on)|when|what day|date|who|organi[sz]|trip|happening)\b/i.test(text);
     const flagged = !basic && m.phone !== trip.organizer;
@@ -353,6 +367,7 @@ export class Engine {
       if (m.budgetCap === null) enqueueAsk(ctx, trip, m, "budget");
       return;
     }
+    if (m.phone === trip.organizer) return ctx.out(m.phone, { kind: "organizer_help" });
     ctx.out(m.phone, trip.status === "collecting_members"
       ? { kind: "waiting_for_start", organizer: organizerName(trip) }
       : { kind: "all_set" });
@@ -495,6 +510,7 @@ function answers(ask: Ask, p: ParsedReply): boolean {
     case "drive": return p.canDrive !== null;
     case "seats": return p.seats !== null || p.canDrive === false;
     case "item": return p.itemYes !== null;
+    case "poll": return p.rsvp !== null || p.itemYes !== null;
     default: return false;
   }
 }

@@ -2,6 +2,7 @@
 import type { Member, Trip } from "../types.js";
 import { MAX_UNANSWERED, itemLabel, sendNextQueued } from "./asks.js";
 import type { Ctx } from "./context.js";
+import { reportPollIfDone } from "./poll.js";
 
 export function checkSilence(ctx: Ctx, trip: Trip): void {
   const now = ctx.now();
@@ -28,6 +29,7 @@ export function checkSilence(ctx: Ctx, trip: Trip): void {
       ctx.log(trip, "nudged", `${m.name} is quiet, moving on`);
     }
   }
+  reportPollIfDone(ctx, trip);
 }
 
 /** Stop waiting on this question. If they answer later, the answer is still applied (staleAsk). */
