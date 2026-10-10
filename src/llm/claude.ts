@@ -16,9 +16,11 @@ export function makeClaude(apiKey: string, model: string, timeoutMs = 5000): Llm
           output_config: { effort: "low" },
           betas: ["server-side-fallback-2026-07-01"],
           fallbacks: "default", // if a safety classifier declines, the API retries on a fallback model in the same call
-          system: opts.json
-            ? "Reply with a single JSON object only. No prose, no code fences."
-            : "Reply with only the text message itself.",
+          system: [
+            // Stable voice guide + examples first, cached across calls (faster and cheaper).
+            ...(opts.system ? [{ type: "text" as const, text: opts.system, cache_control: { type: "ephemeral" as const } }] : []),
+            { type: "text" as const, text: opts.json ? "Reply with a single JSON object only. No prose, no code fences." : "Reply with only the text message itself." },
+          ],
           messages: [{ role: "user", content: prompt }],
         },
         { timeout: timeoutMs },

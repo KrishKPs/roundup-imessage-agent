@@ -21,7 +21,7 @@ import {
 import { type Ctx, type EngineConfig, isGoing, organizerName, seatsNeed } from "./context.js";
 import { finalize } from "./plan.js";
 import { type SeedInput, buildDemoTrip } from "./seed.js";
-import { recordPollAnswer, startPoll } from "./poll.js";
+import { announce, recordPollAnswer, startPoll } from "./poll.js";
 import { checkSilence } from "./timers.js";
 
 export interface EngineDeps {
@@ -187,6 +187,10 @@ export class Engine {
         case "ask_everyone":
           if (!res.question) break;
           startPoll(ctx, trip, `${res.question.trim().replace(/[?!.\s]+$/, "")}?`, res.open ?? undefined);
+          return true;
+        case "tell_everyone":
+          if (!res.message) break;
+          announce(ctx, trip, res.message.trim());
           return true;
         case "status": return handleCommand(env, m.phone, "status");
         case "start": return handleCommand(env, m.phone, "start");

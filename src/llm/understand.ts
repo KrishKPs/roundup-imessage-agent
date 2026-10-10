@@ -51,6 +51,11 @@ export function keywordParse(raw: string, topic: AskTopic | null): ParsedReply {
   const maybe = MAYBE.test(t);
   const num = firstNumber(t);
 
+  // "depends who's going" / "who else is coming?" -> they want info before answering.
+  if (/\b(depends (on )?(who|whos|who's|what|when|where|how much)|who('?s| is| else)( else)? (going|coming|in))\b/.test(t)) {
+    return blank(0.9, "question");
+  }
+
   if (DROP.test(t)) {
     const r = blank(0.9, topic === "rsvp" || topic === "poll" ? "answer" : "drop");
     r.rsvp = "no";

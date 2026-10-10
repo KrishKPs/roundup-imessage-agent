@@ -5,7 +5,7 @@ import { enqueueAsk } from "./asks.js";
 import { newNeed, releaseCommitments } from "./chain.js";
 import { type Ctx, goingMembers, organizerName, seatsNeed } from "./context.js";
 import { budgetAnsweredCount, finalize } from "./plan.js";
-import { parsePollRequest, pollSummary, startPoll } from "./poll.js";
+import { announce, parseAnnouncement, parsePollRequest, pollSummary, startPoll } from "./poll.js";
 import { findJoinCode, organizerVerb, parsePeople, parseTripRequest, textAfterCode } from "./intents.js";
 
 export function newMember(phone: Phone, name: string, now: number): Member {
@@ -93,6 +93,13 @@ export function handleCommand(env: CommandEnv, phone: Phone, text: string): bool
   if (newDate && trip) {
     if (!isOrganizer) ctx.out(phone, { kind: "not_organizer", organizer: organizerName(trip) });
     else setDate(ctx, trip, newDate);
+    return true;
+  }
+
+  const note = trip?.members[phone] ? parseAnnouncement(t) : null;
+  if (note && trip) {
+    if (!isOrganizer) ctx.out(phone, { kind: "not_organizer", organizer: organizerName(trip) });
+    else announce(ctx, trip, note);
     return true;
   }
 

@@ -1,5 +1,9 @@
 // The prompt strings sent to Gemini. Kept short so replies stay fast.
 import type { AskTopic, MessageIntent } from "../types.js";
+import { PHRASE_EXAMPLES, VOICE } from "./examples.js";
+
+/** Stable system prompt for rewording drafts: the voice guide and examples (cached by the provider). */
+export const PHRASE_SYSTEM = `You are Roundup, an AI texting friends 1:1 on iMessage to help plan a group trip.\n\n${VOICE}\n\n${PHRASE_EXAMPLES}`;
 
 const TOPIC_QUESTION: Record<AskTopic, string> = {
   name: "What is your first name?",
@@ -32,7 +36,7 @@ export function phrasePrompt(intent: MessageIntent, draft: string, history: { fr
   const recent = history.length
     ? history.map((t) => `${t.from === "bot" ? "you" : "them"}: ${t.text}`).join("\n")
     : "(first message)";
-  return `You are Roundup, an AI texting a friend 1:1 on iMessage to help plan a group trip. Rewrite the draft so it sounds like a real person texting, and fits the conversation so far.
+  return `Rewrite the draft so it sounds like a real person texting, and fits the conversation so far.
 
 Conversation so far:
 ${recent}

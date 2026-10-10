@@ -4,6 +4,7 @@
 import { z } from "zod";
 import { clip } from "../util.js";
 import type { Llm } from "./gemini.js";
+import { converseSystem } from "./examples.js";
 
 export interface Turn {
   from: "them" | "bot";
@@ -18,7 +19,7 @@ export interface ConverseInput {
   history: Turn[];
 }
 
-const organizerActions = ["reply", "ask_everyone", "status", "start", "send_plans", "add_items", "set_date"] as const;
+const organizerActions = ["reply", "ask_everyone", "tell_everyone", "status", "start", "send_plans", "add_items", "set_date"] as const;
 const memberActions = ["reply", "pass_to_organizer"] as const;
 
 const schema = z.object({
@@ -26,6 +27,7 @@ const schema = z.object({
   question: z.string().max(160).nullable().optional(), // ask_everyone
   open: z.boolean().nullable().optional(), // ask_everyone: true = free-text answers, false = yes/no
   items: z.array(z.string().max(30)).max(6).nullable().optional(), // add_items
+  message: z.string().max(200).nullable().optional(), // tell_everyone
   date: z.string().max(40).nullable().optional(), // set_date
   reply: z.string().max(300).nullable().optional(),
 });
@@ -40,6 +42,7 @@ function prompt(i: ConverseInput): string {
   const actions = i.role === "organizer"
     ? `- "reply": just answer or chat (questions about the trip, thanks, small talk). If they ask about the answers to their question (e.g. "what time works for everyone?"), work it out from the answers in TRIP FACTS: give the option that fits the most people and who it doesn't work for.
 - "ask_everyone": they want a NEW question put to every member (works anytime, even before start). Put the question, phrased to the members, in "question" (e.g. "does 10am saturday work?" or "which days between sat and tue are you free, and what times?"). Set "open": true if it needs a free-text answer (days, times, what to bring), false if yes/no. Don't re-ask a question that's already been answered; use "reply" with the answers instead.
+- "tell_everyone": they want an announcement sent to every member (no answer needed). Put it in "message", in their voice, cleaned up (e.g. "bring sunscreen and a towel!").
 - "status": they want an update on who's in / what's left.
 - "start": they say everyone's in and want to kick things off.
 - "send_plans": they want to wrap up and send everyone their plans now.
@@ -49,7 +52,7 @@ For anything other than "reply", leave "reply" null; the app sends its own confi
     : `- "reply": answer from the facts, or chat back. Use this for thanks, small talk, and questions the facts answer.
 - "pass_to_organizer": they asked something the facts don't answer (cost details, address, what to wear...). Reply saying you'll check with the organizer.`;
 
-  return `You are Roundup, an AI that plans group trips by texting each friend 1:1 over iMessage. You're texting ${i.name || "someone"}, ${i.role === "organizer" ? "who organized this trip" : "a member of this trip"}.
+  return `You're texting ${i.name || "someone"}, ${i.role === "organizer" ? "who organized this trip" : "a member of this trip"}.
 
 TRIP FACTS (the only things you know):
 ${i.facts}
@@ -65,14 +68,14 @@ ${actions}
 Reply style: like a friend texting. lowercase ok. 1-2 short sentences, under 200 characters. at most one emoji, usually none.
 Hard rules: never invent details that aren't in TRIP FACTS (no times, places, prices, names). never reveal anyone's budget except their own. never say you'll do something not in the action list. don't ask them questions (the app asks its own questions at the right time); just answer or acknowledge. don't repeat your last message, and don't greet them again mid-conversation. write names and the trip name exactly as given.
 
-Return JSON only: {"action": string, "question": string|null, "open": boolean|null, "items": string[]|null, "date": string|null, "reply": string|null}`;
+Return JSON only: {"action": string, "question": string|null, "open": boolean|null, "items": string[]|null, "date": string|null, "message": string|null, "reply": string|null}`;
 }
 
 export function makeConverser(llm: Llm | null): Converser | undefined {
   if (!llm) return undefined;
   return async (input) => {
     try {
-      const raw = await llm.generate(prompt(input), { json: true });
+      const raw = await llm.generate(prompt(input), { json: true, system: converseSystem(input.role) });
       const out = schema.parse(JSON.parse(raw.replace(/```(?:json)?/gi, "").trim()));
       const allowed: readonly string[] = input.role === "organizer" ? organizerActions : memberActions;
       if (!allowed.includes(out.action)) return null;

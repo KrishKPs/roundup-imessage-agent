@@ -13,7 +13,10 @@ export function parsePollRequest(raw: string): string | null {
     /^(?:(?:can|could) you |pls |please )?(?:ask|check with|poll)\s+(?:everyone|everybody|the group|all|people|the crew|y'?all|them all)\b[\s,:-]*(?:if |whether )?(.+)$/i,
   );
   if (!m) return null;
-  const q = m[1].trim().replace(/[?!.\s]+$/, "");
+  // The organizer talks about the group ("what snacks they want"); members should read it to them.
+  const q = m[1].trim().replace(/[?!.\s]+$/, "")
+    .replace(/\bthey're\b/gi, "you're").replace(/\bare they\b/gi, "are you").replace(/\bthey are\b/gi, "you are")
+    .replace(/\bthey\b/gi, "you").replace(/\btheir\b/gi, "your").replace(/\bthemselves\b/gi, "yourself").replace(/\bthem\b/gi, "you");
   return q.length >= 3 ? `${q.slice(0, 140)}?` : null;
 }
 
@@ -99,4 +102,25 @@ export function summarizeAnswers(question: string, open: boolean, answers: { nam
   if (by("maybe").length) parts.push(`${by("maybe").length} maybe (${by("maybe").join(", ")})`);
   if (quiet) parts.push(quiet);
   return `"${question}" ${parts.join(", ")}`;
+}
+
+/** "tell everyone to bring sunscreen" / "announce: leaving at 9" -> the message (null if not an announcement). */
+export function parseAnnouncement(raw: string): string | null {
+  const m = raw.trim().match(/^(?:(?:can|could) you |pls |please )?(?:tell|remind|let)\s+(?:everyone|everybody|the group|all|people|y'?all)\s+(?:know\s+)?(?:that\s+|to\s+)?(.+)$|^announce\s*:?\s+(.+)$/i);
+  const msg = (m?.[1] ?? m?.[2])?.trim();
+  return msg && msg.length >= 3 ? msg.slice(0, 200) : null;
+}
+
+/** Send the organizer's note to everyone we can reach. Their words, clearly labeled as from them. */
+export function announce(ctx: Ctx, trip: Trip, message: string): void {
+  const people = Object.values(trip.members).filter((m) => reachable(trip, m));
+  if (!people.length) {
+    ctx.out(trip.organizer, { kind: "text", text: "nobody's joined yet, so there's no one to tell. share your link first!" });
+    return;
+  }
+  const org = organizerName(trip);
+  for (const m of people) ctx.out(m.phone, { kind: "text", text: `from ${org}: ${message}` });
+  const who = people.length <= 3 ? people.map((m) => m.name).join(", ") : `all ${people.length} people`;
+  ctx.out(trip.organizer, { kind: "text", text: `sent to ${who}.` });
+  ctx.log(trip, "asked", `${org} sent everyone a note`);
 }

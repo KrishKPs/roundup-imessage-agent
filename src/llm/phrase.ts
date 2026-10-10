@@ -4,7 +4,7 @@ import type { AskTopic, MessageIntent } from "../types.js";
 import { summarizeAnswers } from "../engine/poll.js";
 import { clip, joinLink, listNames } from "../util.js";
 import type { Llm } from "./gemini.js";
-import { phrasePrompt } from "./prompts.js";
+import { PHRASE_SYSTEM, phrasePrompt } from "./prompts.js";
 
 export type Phraser = (intent: MessageIntent, history?: { from: "them" | "bot"; text: string }[]) => Promise<string>;
 
@@ -114,7 +114,7 @@ export function makePhraser(llm: Llm | null): Phraser {
     const rewordable = LLM_OK.has(intent.kind) || (intent.kind === "pair" && LLM_OK.has(intent.second.kind));
     if (!llm || !rewordable) return intent.kind === "text" || intent.kind === "invite_line" ? draft : clip(draft);
     try {
-      const out = clip((await llm.generate(phrasePrompt(intent, draft, history))).trim().replace(/^["']|["']$/g, ""));
+      const out = clip((await llm.generate(phrasePrompt(intent, draft, history), { system: PHRASE_SYSTEM })).trim().replace(/^["']|["']$/g, ""));
       return isSafeRewrite(draft, out, intent) ? out : clip(draft);
     } catch {
       return clip(draft);

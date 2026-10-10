@@ -2,7 +2,8 @@
 import { GoogleGenAI } from "@google/genai";
 
 export interface Llm {
-  generate(prompt: string, opts?: { json?: boolean }): Promise<string>;
+  /** `system` holds the stable part (voice, examples) so providers can cache it. */
+  generate(prompt: string, opts?: { json?: boolean; system?: string }): Promise<string>;
 }
 
 export function makeGemini(apiKey: string, model: string, timeoutMs = 5000): Llm | null {
@@ -15,7 +16,8 @@ export function makeGemini(apiKey: string, model: string, timeoutMs = 5000): Llm
         contents: prompt,
         config: {
           temperature: opts.json ? 0 : 0.7,
-          maxOutputTokens: 200,
+          maxOutputTokens: 300,
+          ...(opts.system ? { systemInstruction: opts.system } : {}),
           responseMimeType: opts.json ? "application/json" : "text/plain",
           abortSignal: AbortSignal.timeout(timeoutMs),
         },
