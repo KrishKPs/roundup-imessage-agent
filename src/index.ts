@@ -30,6 +30,7 @@ const engine = new Engine({
     giveUpAfterMs: cfg.GIVE_UP_AFTER_SECONDS * 1000,
     demoMode: cfg.DEMO_MODE,
     agentNumber: cfg.AGENT_NUMBER,
+    dedicatedLine: cfg.DEDICATED_LINE,
   },
   onChange: () => dashboard?.broadcast(),
   extractTrip: makeTripExtractor(understandLlm),
@@ -39,7 +40,7 @@ dashboard = startDashboard({
   port: cfg.PORT,
   getState: () => store.state,
   demoMode: cfg.DEMO_MODE,
-  agentNumber: cfg.AGENT_NUMBER,
+  agentNumber: cfg.DEDICATED_LINE ? cfg.AGENT_NUMBER : undefined, // QR only works with one shared number
   onSeed: async (body) => {
     const organizerPhone = body.organizerPhone || process.env.SEED_ORGANIZER_PHONE;
     const memberPhone = body.memberPhone || process.env.SEED_MEMBER_PHONE;

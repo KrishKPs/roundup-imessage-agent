@@ -23,7 +23,10 @@ export function template(i: MessageIntent): string {
     case "ask_name_member": return `hey! i'm Roundup, an AI helping ${i.organizer} plan ${i.trip}. what's your first name?`;
     case "ask_name_organizer": return "hey! i'm Roundup, an AI that plans group trips over text so the group chat doesn't have to. what's your first name?";
     case "intro": return `hey ${i.name}! i'm Roundup, an AI helping ${i.organizer} plan ${i.trip}. i'll ask you a few quick things here so the group chat stays quiet. reply stop anytime.`;
-    case "trip_created": return `nice to meet you ${i.name}! ${i.trip} is set up, code ${i.code}. paste the next text in your group chat, then text start when everyone's in.`;
+    case "trip_created":
+      return i.joinByLink
+        ? `nice to meet you ${i.name}! ${i.trip} is set up, code ${i.code}. paste the next text in your group chat, then text start when everyone's in.`
+        : `nice to meet you ${i.name}! ${i.trip} is set up. who's coming? share their contacts here (+ then Contacts) or type them, like: Sam 704 555 1234`;
     case "invite_line":
       return i.agentNumber
         ? `${i.organizer} is planning ${i.trip}! tap to join: ${joinLink(i.agentNumber, i.code)} (or text "join ${i.code}" to ${i.agentNumber}). Roundup, an AI, sorts out the details with you 1:1.`

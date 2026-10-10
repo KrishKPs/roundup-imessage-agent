@@ -6,6 +6,7 @@ export interface EngineConfig {
   giveUpAfterMs: number;
   demoMode: boolean;
   agentNumber?: string; // E.164; enables tap-to-join links in invites
+  dedicatedLine?: boolean; // one number for everyone, no allowlist: join by link/QR instead of organizer adding people
 }
 
 export interface Ctx {

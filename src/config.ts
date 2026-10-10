@@ -17,6 +17,7 @@ const schema = z.object({
   GIVE_UP_AFTER_SECONDS: z.coerce.number().positive().default(240),
   DEMO_MODE: boolish,
   AGENT_NUMBER: z.string().optional().default(""), // the number people text; used for tap-to-join links
+  DEDICATED_LINE: z.string().optional().transform((v) => (v ?? "false").toLowerCase() === "true"),
 });
 
 export type Config = z.infer<typeof schema>;
