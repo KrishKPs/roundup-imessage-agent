@@ -60,6 +60,7 @@ const timer = setInterval(() => void engine.tick(), 15_000);
 async function shutdown() {
   console.log("\nshutting down...");
   clearInterval(timer);
+  await Promise.race([engine.idle(), new Promise((r) => setTimeout(r, 8000))]); // finish the reply in progress
   dashboard?.server.close();
   await transport.stop().catch(() => undefined);
   process.exit(0);

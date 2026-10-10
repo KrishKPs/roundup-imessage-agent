@@ -28,12 +28,16 @@ export interface EngineDeps {
   extractTrip?: TripExtractor;
 }
 
+/** Replies that need no answer when we haven't asked anything. */
+const ACK_ONLY = /^(ok|okay|k|kk|cool|sounds good|great|nice|thanks|thank you|thx|ty|got it|bet|perfect|awesome|alright|sure|👍|🙏|❤️|lol|haha)[!. ]*$/i;
+
 const QUESTION_KINDS = new Set<MessageIntent["kind"]>([
   "ask_name_member", "ask_name_organizer", "ask_rsvp", "ask_budget", "ask_drive", "ask_seats", "ask_item", "reask", "nudge",
 ]);
 
 export class Engine {
   private lock: Promise<void> = Promise.resolve();
+  private lastSent = new Map<Phone, string>();
   private outbox: Outbound[] = [];
   readonly ctx: Ctx;
 
@@ -147,6 +151,7 @@ export class Engine {
 
     if (ask?.topic === "name") {
       const name = parseName(text);
+      if (!name && text.includes("?")) return this.answerQuestion(trip, m, text);
       if (!name) return this.unclear(trip, m, ask);
       m.name = name;
       resolvePending(ctx, trip, m);
@@ -162,11 +167,12 @@ export class Engine {
       return;
     }
     if (parsed.intent === "drop" && m.rsvp !== "no") return this.dropout(trip, m);
-    if (parsed.intent === "question") return this.answerQuestion(trip, m);
-    if (!ask) return this.unprompted(trip, m, parsed);
+    if (parsed.intent === "question") return this.answerQuestion(trip, m, text);
+    if (!ask && ACK_ONLY.test(text.trim())) return; // "ok", "sounds good": nothing to say back
+    if (!ask) return this.unprompted(trip, m, parsed, text);
 
     if (parsed.confidence < 0.6 || !answers(ask, parsed)) {
-      if (isStale) return this.unprompted(trip, m, parsed);
+      if (isStale) return this.unprompted(trip, m, parsed, text);
       return this.unclear(trip, m, ask);
     }
     if (isStale) m.staleAsk = null;
@@ -250,17 +256,30 @@ export class Engine {
   }
 
   /** Answer only from trip facts; anything else goes to the organizer. Then repeat the open question. */
-  private answerQuestion(trip: Trip, m: Member): void {
+  private answerQuestion(trip: Trip, m: Member, text: string): void {
     const ctx = this.ctx;
-    ctx.out(m.phone, { kind: "question_answer", trip: trip.title, date: trip.dateText, organizer: organizerName(trip) });
-    if (m.phone !== trip.organizer) ctx.out(trip.organizer, { kind: "question_organizer", name: m.name });
+    // "what's the plan?", "when is it?", "who's going?" are answered from trip facts. Anything else goes to the organizer.
+    const basic = /\b(plan|what('?s| is) (this|up|happening|going on)|when|what day|date|who|organi[sz]|trip|happening)\b/i.test(text);
+    const flagged = !basic && m.phone !== trip.organizer;
+    ctx.out(m.phone, {
+      kind: "question_answer", trip: trip.title, date: trip.dateText, organizer: organizerName(trip),
+      collecting: trip.status === "collecting_members", flagged,
+    });
+    if (flagged) ctx.out(trip.organizer, { kind: "question_organizer", name: m.name || "someone" });
     if (m.pendingAsk) ctx.out(m.phone, askIntent(trip, m, m.pendingAsk));
   }
 
   /** A message when no question is open: changed answers ("actually i can drive") or chit-chat. */
-  private unprompted(trip: Trip, m: Member, parsed: ParsedReply): void {
+  private unprompted(trip: Trip, m: Member, parsed: ParsedReply, text: string): void {
     const ctx = this.ctx;
     const seats = seatsNeed(trip);
+    const rename = text.trim().match(/^(?:my name is|my name'?s|call me|actually it'?s|it'?s actually|actually my name is|no,? it'?s)\s+(\p{L}+)/iu);
+    const newName = rename ? parseName(rename[1]) : null;
+    if (newName) {
+      m.name = newName;
+      ctx.out(m.phone, { kind: "text", text: `got it, ${newName}!` });
+      return;
+    }
     if (parsed.canDrive === true) {
       m.carHint = true;
       m.canDrive = null; // let the chain ask them properly
@@ -292,6 +311,11 @@ export class Engine {
     ctx.out(m.phone, trip.status === "collecting_members"
       ? { kind: "waiting_for_start", organizer: organizerName(trip) }
       : { kind: "all_set" });
+  }
+
+  /** Resolves once every queued event has finished (used for a clean shutdown). */
+  idle(): Promise<void> {
+    return this.lock;
   }
 
   // ---------------------------------------------------------------- progress
@@ -383,6 +407,8 @@ export class Engine {
       merged.push({ phone: cur.phone, text: cur.text });
     }
     for (const msg of merged) {
+      if (this.lastSent.get(msg.phone) === msg.text) continue; // never repeat ourselves word for word
+      this.lastSent.set(msg.phone, msg.text);
       try {
         await this.deps.transport.send(msg.phone, msg.text);
       } catch (err) {

@@ -25,13 +25,22 @@ export function newId(prefix: string): string {
 }
 
 /** Pull a first name out of replies like "Sam", "i'm sam", "it's Sam Lee". */
+const NOT_NAMES = new Set([
+  "so", "what", "whats", "what's", "ok", "okay", "k", "yes", "yeah", "yep", "no", "nope", "nah", "hi", "hey", "hello",
+  "sure", "cool", "thanks", "thx", "idk", "lol", "the", "a", "i", "me", "why", "how", "when", "where", "who", "hmm",
+  "um", "wait", "sorry", "in", "out", "maybe", "plan", "trip", "sounds", "good", "great", "nice", "huh", "can", "is",
+]);
+
 export function parseName(text: string): string | null {
+  if (text.includes("?")) return null; // a question is never a name
   const cleaned = text
     .trim()
     .replace(/^(hi|hey|hello)[,!.\s]+/i, "")
     .replace(/^(i'?m|im|i am|it'?s|its|my name is|name'?s|this is|call me)\s+/i, "");
-  const word = cleaned.split(/\s+/)[0]?.replace(/[^\p{L}'-]/gu, "") ?? "";
-  if (word.length < 1 || word.length > 20) return null;
+  const words = cleaned.split(/\s+/).filter(Boolean);
+  if (words.length > 3) return null; // a sentence, not a name
+  const word = words[0]?.replace(/[^\p{L}'-]/gu, "") ?? "";
+  if (word.length < 1 || word.length > 20 || NOT_NAMES.has(word.toLowerCase())) return null;
   return word[0].toUpperCase() + word.slice(1).toLowerCase();
 }
 

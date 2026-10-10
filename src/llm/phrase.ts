@@ -41,7 +41,13 @@ export function template(i: MessageIntent): string {
     case "ack": return ackText(i.topic, i.value);
     case "handoff_member": return `no worries, i'll let ${i.organizer} follow up with you.`;
     case "handoff_organizer": return `heads up: i couldn't get a clear answer from ${i.name} about ${topicLabel(i.topic, i.item)}. can you check with them?`;
-    case "question_answer": return `here's what i know: ${i.trip}${i.date ? `, ${i.date}` : ""}, organized by ${i.organizer}. for anything else i've flagged it to ${i.organizer}.`;
+    case "question_answer": {
+      const what = `${i.organizer}'s planning ${i.trip}${i.date ? ` (${i.date})` : ""}.`;
+      const next = i.collecting
+        ? ` once ${i.organizer} kicks it off, i'll ask you a few quick things here.`
+        : " i'm sorting out who's in, rides, and what to bring, then i'll text you your plan.";
+      return `${what}${next}${i.flagged ? ` i've asked ${i.organizer} about the rest.` : ""}`;
+    }
     case "question_organizer": return `${i.name} has a question about the trip that i couldn't answer. can you text them?`;
     case "drop_ack": return `totally get it ${i.name}, you're off the list. thanks for telling me!`;
     case "organizer_drop": return `heads up: ${i.name} can't come anymore. i'm rebalancing the plan.`;

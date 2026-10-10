@@ -107,7 +107,7 @@ export type MessageIntent =
   | { kind: "ack"; topic: AskTopic; value: "yes" | "no" | "maybe" | "skip" | "done" }
   | { kind: "handoff_member"; organizer: string }
   | { kind: "handoff_organizer"; name: string; topic: AskTopic; item: string | null }
-  | { kind: "question_answer"; trip: string; date: string | null; organizer: string }
+  | { kind: "question_answer"; trip: string; date: string | null; organizer: string; collecting: boolean; flagged: boolean }
   | { kind: "question_organizer"; name: string }
   | { kind: "drop_ack"; name: string }
   | { kind: "organizer_drop"; name: string }
