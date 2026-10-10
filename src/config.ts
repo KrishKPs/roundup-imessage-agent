@@ -16,6 +16,7 @@ const schema = z.object({
   NUDGE_AFTER_SECONDS: z.coerce.number().positive().default(120),
   GIVE_UP_AFTER_SECONDS: z.coerce.number().positive().default(240),
   DEMO_MODE: boolish,
+  AGENT_NUMBER: z.string().optional().default(""), // the number people text; used for tap-to-join links
 });
 
 export type Config = z.infer<typeof schema>;

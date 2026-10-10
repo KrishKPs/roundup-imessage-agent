@@ -59,7 +59,12 @@
   .empty { grid-column: 1 / -1; text-align: center; padding: 80px; color: var(--muted); font-size: 28px; }
   .status { font-size: 16px; padding: 6px 14px; border-radius: 999px; background: #e6f4ff; color: #1f5f8b; font-weight: 700; }
   @media (max-width: 900px) { main { grid-template-columns: 1fr; } h1 { font-size: 32px; } }
+  .join { display: flex; align-items: center; gap: 18px; }
+  #qr { background: #fff; padding: 10px; border-radius: 14px; box-shadow: 0 6px 16px rgba(30,110,160,.2); }
+  #qr img, #qr canvas { display: block; }
+  .scan { font-size: 15px; color: var(--muted); max-width: 120px; }
 </style>
+<script src="qrcode.min.js"></script>
 </head>
 <body>
 <main id="app"><div class="card empty">waiting for a trip… text <b>new trip Beach day</b> to start</div></main>
@@ -84,7 +89,7 @@
     app.innerHTML = `
       <header class="card">
         <div><h1>${esc(t.title)}</h1><div class="sub">${t.dateText ? esc(t.dateText) + " · " : ""}organized by ${esc(t.organizer)} · <span class="status">${tripStatus[t.status]}</span></div></div>
-        <div class="code"><small>TEXT TO JOIN</small>join ${esc(t.code)}</div>
+        <div class="join">${t.joinLink ? '<div class="scan">scan with your iPhone camera to join</div><div id="qr"></div>' : ""}<div class="code"><small>TEXT TO JOIN</small>join ${esc(t.code)}</div></div>
       </header>
       <section class="card" style="grid-column:1/-1"><h2>People</h2><div class="chips">
         ${t.members.map((m) => `<span class="chip ${m.status}">${esc(m.name)}<span class="s">${statusLabel[m.status]}</span></span>`).join("")}
@@ -98,6 +103,15 @@
       <section class="card" style="grid-column:1/-1"><h2>Live feed</h2><ul class="feed">
         ${t.feed.map((e) => `<li><time>${time(e.at)}</time><span>${esc(e.text)}</span></li>`).join("")}
       </ul></section>`;
+    drawQr(t);
+  }
+
+  // SMSTO: opens Messages to the agent with "join CODE" typed (iPhone camera understands it).
+  function drawQr(t) {
+    const el = document.getElementById("qr");
+    if (!el || !t.joinLink || typeof QRCode === "undefined") return;
+    const number = t.joinLink.slice(4, t.joinLink.indexOf("&"));
+    new QRCode(el, { text: `SMSTO:${number}:join ${t.code}`, width: 132, height: 132, correctLevel: QRCode.CorrectLevel.M });
   }
 
   const es = new EventSource("/events");

@@ -94,7 +94,7 @@ export type MessageIntent =
   | { kind: "ask_name_organizer" }
   | { kind: "intro"; name: string; trip: string; organizer: string }
   | { kind: "trip_created"; name: string; trip: string; code: string }
-  | { kind: "invite_line"; trip: string; code: string; organizer: string }
+  | { kind: "invite_line"; trip: string; code: string; organizer: string; agentNumber: string | null }
   | { kind: "ask_rsvp"; name: string; trip: string; date: string | null }
   | { kind: "ask_budget"; name: string }
   | { kind: "ask_drive"; name: string; trip: string }

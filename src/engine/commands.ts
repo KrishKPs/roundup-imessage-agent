@@ -131,7 +131,7 @@ function createTrip(env: CommandEnv, phone: Phone, title: string, dateText: stri
 export function sendTripCreated(ctx: Ctx, trip: Trip): void {
   const org = trip.members[trip.organizer];
   ctx.out(org.phone, { kind: "trip_created", name: org.name, trip: trip.title, code: trip.code });
-  ctx.out(org.phone, { kind: "invite_line", trip: trip.title, code: trip.code, organizer: org.name });
+  ctx.out(org.phone, { kind: "invite_line", trip: trip.title, code: trip.code, organizer: org.name, agentNumber: ctx.cfg.agentNumber || null });
   ctx.log(trip, "joined", `${org.name} started ${trip.title}`);
 }
 

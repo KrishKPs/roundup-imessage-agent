@@ -5,6 +5,7 @@ export interface EngineConfig {
   nudgeAfterMs: number;
   giveUpAfterMs: number;
   demoMode: boolean;
+  agentNumber?: string; // E.164; enables tap-to-join links in invites
 }
 
 export interface Ctx {

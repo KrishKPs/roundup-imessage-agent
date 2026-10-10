@@ -41,6 +41,11 @@ export function listNames(names: string[]): string {
   return `${names.slice(0, -1).join(", ")}, and ${names[names.length - 1]}`;
 }
 
+/** A link that opens Messages to the agent with "join CODE" already typed (iOS). */
+export function joinLink(agentNumber: string, code: string): string {
+  return `sms:${agentNumber}&body=${encodeURIComponent(`join ${code}`)}`;
+}
+
 /** Trim and hard-cap to 160 characters (voice rule). */
 export function clip(text: string, max = 160): string {
   const t = text.replace(/\s+/g, " ").trim();

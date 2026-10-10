@@ -6,11 +6,13 @@ import express from "express";
 import type { Response } from "express";
 import { publicView } from "../engine/view.js";
 import type { State, Trip } from "../types.js";
+import { joinLink } from "../util.js";
 
 export interface DashboardOptions {
   port: number;
   getState: () => State;
   demoMode: boolean;
+  agentNumber?: string;
   onSeed?: (body: Record<string, string>) => Promise<void>;
   onReset?: () => Promise<void>;
 }
@@ -27,7 +29,7 @@ export function startDashboard(opts: DashboardOptions) {
 
   const snapshot = () => {
     const trip = currentTrip(opts.getState());
-    return trip ? publicView(trip) : null;
+    return trip ? { ...publicView(trip), joinLink: opts.agentNumber ? joinLink(opts.agentNumber, trip.code) : null } : null;
   };
 
   app.get("/api/state", (_req, res) => {

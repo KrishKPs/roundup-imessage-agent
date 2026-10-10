@@ -1,7 +1,7 @@
 // Turns a MessageIntent into one short text. Every intent has a fixed template;
 // a few casual ones may be reworded by Gemini, with the template as the fallback.
 import type { AskTopic, MessageIntent } from "../types.js";
-import { clip } from "../util.js";
+import { clip, joinLink } from "../util.js";
 import type { Llm } from "./gemini.js";
 import { phrasePrompt } from "./prompts.js";
 
@@ -23,8 +23,11 @@ export function template(i: MessageIntent): string {
     case "ask_name_member": return `hey! i'm Roundup, an AI helping ${i.organizer} plan ${i.trip}. what's your first name?`;
     case "ask_name_organizer": return "hey! i'm Roundup, an AI that plans group trips over text so the group chat doesn't have to. what's your first name?";
     case "intro": return `hey ${i.name}! i'm Roundup, an AI helping ${i.organizer} plan ${i.trip}. i'll ask you a few quick things here so the group chat stays quiet. reply stop anytime.`;
-    case "trip_created": return `nice to meet you ${i.name}! ${i.trip} is set up. join code: ${i.code}. forward the next text to your friends, then text start when everyone's in.`;
-    case "invite_line": return `${i.organizer} is planning ${i.trip}! text "join ${i.code}" to this number and Roundup will sort out the details with you 1:1.`;
+    case "trip_created": return `nice to meet you ${i.name}! ${i.trip} is set up, code ${i.code}. paste the next text in your group chat, then text start when everyone's in.`;
+    case "invite_line":
+      return i.agentNumber
+        ? `${i.organizer} is planning ${i.trip}! tap to join: ${joinLink(i.agentNumber, i.code)} (or text "join ${i.code}" to ${i.agentNumber}). Roundup, an AI, sorts out the details with you 1:1.`
+        : `${i.organizer} is planning ${i.trip}! text "join ${i.code}" to this number and Roundup will sort out the details with you 1:1.`;
     case "ask_rsvp": return `are you in for ${i.trip}${i.date ? ` on ${i.date}` : ""}? yes, no, or maybe`;
     case "ask_budget": return "what's the most you'd want to spend on this trip? stays private, i only share the group's lowest number.";
     case "ask_drive": return `can you drive for ${i.trip}? if yes, how many seats including you?`;
@@ -79,7 +82,7 @@ const LLM_OK = new Set<MessageIntent["kind"]>(["ask_rsvp", "ask_drive", "ask_ite
 export function makePhraser(llm: Llm | null): Phraser {
   return async (intent) => {
     const draft = template(intent);
-    if (!llm || !LLM_OK.has(intent.kind)) return intent.kind === "text" ? draft : clip(draft);
+    if (!llm || !LLM_OK.has(intent.kind)) return intent.kind === "text" || intent.kind === "invite_line" ? draft : clip(draft);
     try {
       const out = clip((await llm.generate(phrasePrompt(intent, draft))).replace(/^["']|["']$/g, ""));
       return isSafeRewrite(draft, out) ? out : clip(draft);
