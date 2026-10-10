@@ -64,7 +64,10 @@ export class Engine {
       const trip = this.tripOf(phone);
       const m = trip?.members[phone];
       if (m?.optedOut) return; // stop is permanent: never reply again
-      if (m) m.sentSinceReply = 0;
+      if (m) {
+        m.sentSinceReply = 0;
+        m.heardFrom = true;
+      }
 
       const env: CommandEnv = { ctx: this.ctx, state: this.state, resetState: () => this.deps.store.reset() };
       if (handleCommand(env, phone, body)) {
@@ -408,9 +411,9 @@ export class Engine {
     }
     for (const msg of merged) {
       if (this.lastSent.get(msg.phone) === msg.text) continue; // never repeat ourselves word for word
-      this.lastSent.set(msg.phone, msg.text);
       try {
         await this.deps.transport.send(msg.phone, msg.text);
+        this.lastSent.set(msg.phone, msg.text);
       } catch (err) {
         console.error(`[engine] send failed: ${(err as Error).message}`);
       }

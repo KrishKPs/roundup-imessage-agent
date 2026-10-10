@@ -239,7 +239,14 @@ export function addPeople(env: CommandEnv, phone: Phone, people: { name: string 
   let skipped = 0;
   for (const person of people) {
     const p = normalizePhone(person.phone);
-    if (p === phone || trip.members[p] || optedOutAnywhere(p)) {
+    const existing = trip.members[p];
+    if (existing?.invited && !existing.heardFrom && !existing.optedOut) {
+      // Added before but never replied (maybe the invite didn't arrive): send it again.
+      ctx.out(p, { kind: "invited", name: existing.name, trip: trip.title, organizer: organizerName(trip), date: trip.dateText, again: true });
+      added.push(existing.name || "1 person");
+      continue;
+    }
+    if (p === phone || existing || optedOutAnywhere(p)) {
       skipped += 1;
       continue;
     }

@@ -13,18 +13,48 @@ type SpaceLike = { send: (text: string) => Promise<unknown>; responding: (fn: ()
 export class SpectrumTransport implements Transport {
   /** DM spaces we have seen, by phone. Only people who texted us first are ever in here (spec 10.3). */
   private spaces = new Map<Phone, SpaceLike>();
-  private constructor(private app: App, private registry: UserRegistry) {}
+  private stopped = false;
+  private reconnecting: Promise<void> | null = null;
 
-  static async connect(projectId: string, projectSecret: string): Promise<SpectrumTransport> {
-    const app = await Spectrum({
+  private constructor(
+    private app: App,
+    private registry: UserRegistry,
+    private projectId: string,
+    private projectSecret: string,
+  ) {}
+
+  private static open(projectId: string, projectSecret: string): Promise<App> {
+    return Spectrum({
       projectId,
       projectSecret,
       providers: [imessage.config()],
       options: { logLevel: process.env.SPECTRUM_LOG_LEVEL === "debug" ? "debug" : "info" },
     });
+  }
+
+  static async connect(projectId: string, projectSecret: string): Promise<SpectrumTransport> {
+    const app = await SpectrumTransport.open(projectId, projectSecret);
     const registry = new UserRegistry(projectId);
     await registry.load();
-    return new SpectrumTransport(app, registry);
+    return new SpectrumTransport(app, registry, projectId, projectSecret);
+  }
+
+  /**
+   * A newly registered person may be put on a pool line this connection doesn't know yet
+   * (Photon only picks up new lines on token renewal). Reconnecting fetches fresh lines.
+   */
+  private reconnect(): Promise<void> {
+    this.reconnecting ??= (async () => {
+      console.log("[spectrum] reconnecting to pick up new lines...");
+      const old = this.app;
+      this.app = await SpectrumTransport.open(this.projectId, this.projectSecret);
+      this.spaces.clear();
+      await old.stop().catch(() => undefined); // ends the old message stream; listen() moves to the new one
+      console.log("[spectrum] reconnected");
+    })().finally(() => {
+      this.reconnecting = null;
+    });
+    return this.reconnecting;
   }
 
   /** Loop over inbound messages forever. Handlers run inside the typing indicator. */
@@ -33,7 +63,9 @@ export class SpectrumTransport implements Transport {
     onContacts: (phone: Phone, people: { name: string | null; phone: string }[]) => Promise<void>,
   ): Promise<void> {
     let loggedSender = false;
-    for await (const [space, message] of this.app.messages) {
+    while (!this.stopped) {
+    const app = this.app;
+    for await (const [space, message] of app.messages) {
       try {
         if (message.platform !== "imessage") continue;
         const im = imessage(space);
@@ -71,23 +103,43 @@ export class SpectrumTransport implements Transport {
         console.error("[spectrum] error handling inbound message:", err);
       }
     }
+    if (this.reconnecting) await this.reconnecting; // stream ended because we swapped connections
+    else if (app === this.app) break; // stream ended for real
+    }
   }
 
   async send(phone: Phone, text: string): Promise<void> {
     await this.registry.ensure(phone); // shared pool only messages registered users
+    for (let attempt = 1; ; attempt++) {
+      try {
+        await this.sendOnce(phone, text);
+        console.log(`[out] ${maskPhone(phone)}: ${text}`);
+        return;
+      } catch (err) {
+        const notAllowed = /target not allowed/i.test((err as Error).message);
+        if (!notAllowed || attempt >= 3) throw err;
+        console.log(`[spectrum] ${maskPhone(phone)} not reachable yet (attempt ${attempt}), refreshing lines`);
+        if (this.reconnecting) await this.reconnecting;
+        else await this.reconnect();
+        await new Promise((r) => setTimeout(r, 1500 * attempt));
+      }
+    }
+  }
+
+  private async sendOnce(phone: Phone, text: string): Promise<void> {
     let space = this.spaces.get(phone);
     if (!space) {
-      // After a restart we may not have the space cached; reopen the existing DM.
+      // First message to someone, or after a reconnect: open the DM.
       const im = imessage(this.app);
       const user = await im.user(phone);
       space = (await im.space.create(user)) as unknown as SpaceLike;
       this.spaces.set(phone, space);
     }
     await space.send(text);
-    console.log(`[out] ${maskPhone(phone)}: ${text}`);
   }
 
   async stop(): Promise<void> {
+    this.stopped = true;
     await this.app.stop();
   }
 }

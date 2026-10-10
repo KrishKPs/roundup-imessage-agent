@@ -35,6 +35,7 @@ export interface Member {
   sentSinceReply: number; // messages sent since their last reply (cap of 2 for questions)
   lastPlan: string | null; // last plan text we sent, so updates only go to people whose plan changed
   invited?: boolean; // added by the organizer (contact card or number) rather than joining by code
+  heardFrom?: boolean; // they have texted us at least once
 }
 
 export interface Need {
@@ -123,7 +124,7 @@ export type MessageIntent =
   | { kind: "late_ack" }
   | { kind: "noted_car" }
   | { kind: "all_set" }
-  | { kind: "invited"; name: string; trip: string; organizer: string; date: string | null }
+  | { kind: "invited"; name: string; trip: string; organizer: string; date: string | null; again?: boolean }
   | { kind: "people_added"; names: string[]; skipped: number; started: boolean }
   | { kind: "add_needs_trip" }
   | { kind: "ask_what_planning" };

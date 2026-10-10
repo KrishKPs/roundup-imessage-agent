@@ -61,3 +61,21 @@ describe("organizer adds people", () => {
     expect(h.transport.to(phoneFor(3))).toEqual([]);
   });
 });
+
+describe("re-adding", () => {
+  it("re-sharing someone who never replied re-sends their invite; once they reply, it's skipped", async () => {
+    const h = harness();
+    const org = phoneFor(0);
+    await h.say(org, "camping trip saturday");
+    await h.say(org, "Hasti");
+    await h.engine.handleContacts(org, [{ name: "Khush", phone: phoneFor(5) }]);
+    h.transport.clear();
+    await h.engine.handleContacts(org, [{ name: "Khush", phone: phoneFor(5) }]);
+    expect(h.transport.to(phoneFor(5))).toHaveLength(1);
+    expect(h.transport.to(phoneFor(5))[0]).toMatch(/Hasti added you/);
+    await h.say(phoneFor(5), "hi!");
+    h.transport.clear();
+    await h.engine.handleContacts(org, [{ name: "Khush", phone: phoneFor(5) }]);
+    expect(h.transport.to(phoneFor(5))).toEqual([]);
+  });
+});
