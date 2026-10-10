@@ -177,9 +177,11 @@ sender's phone number or email when available.
 **UNVERIFIED, check docs before using**
 - The exact call for tapback reactions (the marketing site shows `message.react("like")`,
   but that snippet is illustrative).
-- Whether `message.sender.id` is the phone number. On the first real inbound message,
-  log `message.sender` and `imessage(message).sender` and confirm which field holds the
-  E.164 number. Key members by that number.
+- ~~Whether `message.sender.id` is the phone number.~~ **VERIFIED Oct 10, 2026** on a real
+  inbound DM: `message.sender.id` and `imessage(message).sender.address` both hold the
+  E.164 number (e.g. `+1•••••6814`), plus `country: "US"`, `service: "iMessage"`.
+  `imessage(space).type` is `"dm"` and `imessage(space).phone` is `"shared"` on the Pro
+  plan. Members are keyed by `sender.address`, falling back to `sender.id`.
 - Polls, effects, and edits. Only use them if the docs confirm the call shape and it
   takes under 20 minutes.
 
