@@ -11,6 +11,7 @@ import { applyChainAnswer, newNeed, recomputeSeats, releaseCommitments, runChain
 import { type CommandEnv, handleCommand, optOut, sendTripCreated, welcome } from "./commands.js";
 import { type Ctx, type EngineConfig, isGoing, organizerName, seatsNeed } from "./context.js";
 import { finalize } from "./plan.js";
+import { type SeedInput, buildDemoTrip } from "./seed.js";
 import { checkSilence } from "./timers.js";
 
 export interface EngineDeps {
@@ -87,12 +88,20 @@ export class Engine {
     });
   }
 
-  /** Run a demo/test setup function inside the lock, then advance and send. */
-  mutate(fn: (ctx: Ctx) => Trip | void): Promise<void> {
+  /** DEMO_MODE: wipe everything and build the demo trip (spec 14). */
+  seedDemo(input: SeedInput): Promise<void> {
     return this.run(async () => {
-      const trip = fn(this.ctx);
-      if (trip) this.advance(trip);
+      this.deps.store.reset();
+      const trip = buildDemoTrip(this.ctx, input);
+      this.state.trips[trip.id] = trip;
+      for (const phone of Object.keys(trip.members)) this.state.phoneTrip[phone] = trip.id;
+      this.advance(trip);
     });
+  }
+
+  /** DEMO_MODE: wipe everything. */
+  reset(): Promise<void> {
+    return this.run(async () => this.deps.store.reset());
   }
 
   // ---------------------------------------------------------------- replies

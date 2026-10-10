@@ -8,7 +8,8 @@
     "dev": "tsx src/index.ts",
     "simulate": "tsx scripts/simulate.ts",
     "seed": "tsx scripts/seed.ts",
-    "typecheck": "tsc --noEmit"
+    "typecheck": "tsc --noEmit",
+    "echo": "tsx scripts/echo.ts"
   },
   "keywords": [],
   "author": "",

@@ -1,10 +1,15 @@
 // Runs a scripted 6-person trip through the fake transport and prints every message.
 // No credentials or phones needed: `npm run simulate`.
+// `npm run simulate -- --board` also serves the trip board on PORT and slows down so you can watch it.
 import { Engine } from "../src/engine/engine.js";
 import { makePhraser } from "../src/llm/phrase.js";
 import { makeUnderstander } from "../src/llm/understand.js";
 import { Store } from "../src/store.js";
 import { FakeTransport } from "../src/transport/fake.js";
+import { startDashboard } from "../src/dashboard/server.js";
+
+const board = process.argv.includes("--board");
+const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
 
 const people = {
   Priya: "+19195550001",
@@ -19,18 +24,23 @@ const nameOf = Object.fromEntries(Object.entries(people).map(([n, p]) => [p, n])
 let clock = 1_000_000;
 const transport = new FakeTransport();
 transport.onSend = (m) => console.log(`  -> ${nameOf[m.phone] ?? m.phone}: ${m.text}`);
+const store = new Store(null);
+let dash: ReturnType<typeof startDashboard> | null = null;
 const engine = new Engine({
-  store: new Store(null),
+  store,
   transport,
   understand: makeUnderstander(null),
   phrase: makePhraser(null),
   cfg: { nudgeAfterMs: 120_000, giveUpAfterMs: 240_000, demoMode: true },
   now: () => clock,
+  onChange: () => dash?.broadcast(),
 });
+if (board) dash = startDashboard({ port: Number(process.env.PORT || 3000), getState: () => store.state, demoMode: false });
 
 async function say(name: keyof typeof people, text: string) {
   console.log(`<- ${name}: ${text}`);
   clock += 1000;
+  if (board) await sleep(1200);
   await engine.handleInbound(people[name], text);
 }
 
@@ -102,6 +112,8 @@ async function main() {
 
   section("dashboard feed");
   for (const e of Object.values(engine.state.trips)[0].log.slice(-12)) console.log(`  [${e.kind}] ${e.text}`);
+  if (board) console.log("\nboard still running at http://localhost:" + (process.env.PORT || 3000) + " (Ctrl+C to quit)");
+  else process.exit(0);
 }
 
 main();

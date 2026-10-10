@@ -1,0 +1,107 @@
+<!doctype html>
+<!-- The trip board: shows the private 1:1 conversations as progress, never their content. -->
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Roundup trip board</title>
+<style>
+  :root {
+    --sky: #dff3ff; --sky-deep: #7cc8f2; --ink: #0d3550; --muted: #4f7590;
+    --green: #3fbf6f; --green-soft: #d9f7e3; --red: #e0605c; --red-soft: #fde3e2;
+    --amber: #e8a93a; --amber-soft: #fff1d6; --card: rgba(255,255,255,0.78);
+  }
+  * { box-sizing: border-box; }
+  body {
+    margin: 0; min-height: 100vh; color: var(--ink);
+    font: 20px/1.35 "Segoe UI", "Helvetica Neue", system-ui, sans-serif;
+    background: linear-gradient(180deg, #bfe7ff 0%, #e8f8ff 45%, #dcf5e4 100%) fixed;
+  }
+  main { max-width: 1280px; margin: 0 auto; padding: 28px 24px 40px; display: grid; gap: 20px;
+         grid-template-columns: 1.6fr 1fr; }
+  .card { background: var(--card); border-radius: 22px; padding: 20px 24px;
+          border: 1px solid rgba(255,255,255,0.9);
+          box-shadow: 0 10px 30px rgba(30,110,160,0.15), inset 0 1px 0 rgba(255,255,255,0.95);
+          backdrop-filter: blur(8px); }
+  header { grid-column: 1 / -1; display: flex; align-items: center; justify-content: space-between; gap: 16px; }
+  h1 { margin: 0; font-size: 44px; letter-spacing: -0.5px; }
+  .sub { color: var(--muted); font-size: 22px; }
+  .code { font: 700 40px/1 ui-monospace, Menlo, monospace; padding: 14px 22px; border-radius: 16px; color: #fff;
+          background: linear-gradient(180deg, #5fd08a, #2ea85c); box-shadow: inset 0 2px 0 rgba(255,255,255,.5), 0 6px 16px rgba(46,168,92,.35); }
+  .code small { display: block; font: 600 13px system-ui; opacity: .9; letter-spacing: 1px; margin-bottom: 6px; }
+  h2 { margin: 0 0 12px; font-size: 18px; text-transform: uppercase; letter-spacing: 1.5px; color: var(--muted); }
+  .chips { display: flex; flex-wrap: wrap; gap: 10px; }
+  .chip { padding: 8px 16px; border-radius: 999px; font-weight: 600; background: #eef6fb; border: 1px solid #d3e6f2; }
+  .chip.in { background: var(--green-soft); border-color: #a8e4bc; }
+  .chip.out, .chip.opted_out { background: var(--red-soft); border-color: #f4b9b6; text-decoration: line-through; opacity: .75; }
+  .chip.maybe { background: var(--amber-soft); border-color: #f2d394; }
+  .chip.waiting { color: var(--muted); }
+  .chip .s { font-weight: 400; font-size: 15px; margin-left: 6px; opacity: .8; }
+  .need { margin-bottom: 18px; }
+  .need-head { display: flex; justify-content: space-between; font-weight: 700; font-size: 24px; margin-bottom: 8px; }
+  .bar { height: 22px; border-radius: 999px; background: #e4eef5; overflow: hidden; box-shadow: inset 0 1px 3px rgba(0,0,0,.08); }
+  .fill { height: 100%; border-radius: 999px; transition: width .6s ease;
+          background: linear-gradient(180deg, #8ee0a9, #3fbf6f); box-shadow: inset 0 2px 0 rgba(255,255,255,.55); }
+  .need.short .fill { background: linear-gradient(180deg, #f6c46d, #e8a93a); }
+  .chain { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 10px; font-size: 17px; }
+  .link { padding: 4px 12px; border-radius: 10px; background: #f2f7fa; color: var(--muted); }
+  .link.providing { background: var(--green-soft); color: #1d7a43; font-weight: 700; }
+  .link.said_no { background: var(--red-soft); color: #a33a36; }
+  .link.asked { background: #dcefff; color: #1f5f8b; font-weight: 600; outline: 2px solid #9fd0f3; }
+  .arrow { color: #a9c3d4; align-self: center; }
+  .feed { list-style: none; margin: 0; padding: 0; }
+  .feed li { padding: 10px 0; border-bottom: 1px solid #e3eef5; display: flex; gap: 12px; align-items: baseline; }
+  .feed li:first-child { font-weight: 700; animation: pop .5s ease; }
+  .feed time { color: var(--muted); font-size: 15px; min-width: 64px; }
+  @keyframes pop { from { background: #fffbe0; } to { background: transparent; } }
+  .budget { font-size: 26px; font-weight: 700; }
+  .private { color: var(--muted); font-size: 15px; margin-top: 6px; }
+  .empty { grid-column: 1 / -1; text-align: center; padding: 80px; color: var(--muted); font-size: 28px; }
+  .status { font-size: 16px; padding: 6px 14px; border-radius: 999px; background: #e6f4ff; color: #1f5f8b; font-weight: 700; }
+  @media (max-width: 900px) { main { grid-template-columns: 1fr; } h1 { font-size: 32px; } }
+</style>
+</head>
+<body>
+<main id="app"><div class="card empty">waiting for a trip… text <b>new trip Beach day</b> to start</div></main>
+<script>
+  const esc = (s) => String(s ?? "").replace(/[&<>"]/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" }[c]));
+  const statusLabel = { in: "in", out: "out", maybe: "maybe", waiting: "waiting", opted_out: "opted out" };
+  const markLabel = { providing: "✓", said_no: "✗", asked: "…", not_asked: "" };
+  const tripStatus = { collecting_members: "collecting people", coordinating: "coordinating", finalized: "plan sent" };
+  const time = (t) => new Date(t).toLocaleTimeString([], { hour: "numeric", minute: "2-digit", second: "2-digit" });
+
+  function render(t) {
+    const app = document.getElementById("app");
+    if (!t) { app.innerHTML = '<div class="card empty">waiting for a trip… text <b>new trip Beach day</b> to start</div>'; return; }
+    const needs = t.needs.length ? t.needs.map((n) => {
+      const pct = n.needed ? Math.min(100, Math.round((n.filled / n.needed) * 100)) : 0;
+      const label = n.kind === "seats" ? `Seats ${n.filled} / ${n.needed}` : `${n.label[0].toUpperCase() + n.label.slice(1)} ${n.filled} / ${n.needed}`;
+      const chain = n.chain.map((c) => `<span class="link ${c.mark}">${esc(c.name)} ${markLabel[c.mark]}</span>`).join('<span class="arrow">→</span>');
+      return `<div class="need ${n.status}"><div class="need-head"><span>${esc(label)}</span><span class="status">${n.status}</span></div>
+        <div class="bar"><div class="fill" style="width:${pct}%"></div></div><div class="chain">${chain}</div></div>`;
+    }).join("") : '<div class="private">needs open once people answer whether they\'re in</div>';
+    const b = t.budget;
+    app.innerHTML = `
+      <header class="card">
+        <div><h1>${esc(t.title)}</h1><div class="sub">${t.dateText ? esc(t.dateText) + " · " : ""}organized by ${esc(t.organizer)} · <span class="status">${tripStatus[t.status]}</span></div></div>
+        <div class="code"><small>TEXT TO JOIN</small>join ${esc(t.code)}</div>
+      </header>
+      <section class="card" style="grid-column:1/-1"><h2>People</h2><div class="chips">
+        ${t.members.map((m) => `<span class="chip ${m.status}">${esc(m.name)}<span class="s">${statusLabel[m.status]}</span></span>`).join("")}
+      </div></section>
+      <section class="card"><h2>Needs &amp; who's been asked</h2>${needs}</section>
+      <section class="card"><h2>Budget</h2>
+        <div class="budget">${b.answered} of ${b.total} answered</div>
+        <div class="budget" style="color:#1d7a43">${b.groupMax !== null ? `everyone's ok up to $${b.groupMax}` : ""}</div>
+        <div class="private">individual answers stay private. the group number only shows once 2+ people answer.</div>
+      </section>
+      <section class="card" style="grid-column:1/-1"><h2>Live feed</h2><ul class="feed">
+        ${t.feed.map((e) => `<li><time>${time(e.at)}</time><span>${esc(e.text)}</span></li>`).join("")}
+      </ul></section>`;
+  }
+
+  const es = new EventSource("/events");
+  es.onmessage = (e) => render(JSON.parse(e.data));
+</script>
+</body>
+</html>
