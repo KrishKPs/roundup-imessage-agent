@@ -26,7 +26,7 @@ export function template(i: MessageIntent): string {
     case "trip_created":
       return i.joinByLink
         ? `nice to meet you ${i.name}! ${i.trip} is set up, code ${i.code}. paste the next text in your group chat, then text start when everyone's in.`
-        : `nice to meet you ${i.name}! ${i.trip} is set up. who's coming? share their contacts here (+ then Contacts) or type them, like: Sam 704 555 1234`;
+        : `nice to meet you ${i.name}! ${i.trip} is set up. who's coming? type their names and numbers here, like: Sam 704 555 1234 (or share contacts from the Contacts app)`;
     case "invite_line":
       return i.agentNumber
         ? `${i.organizer} is planning ${i.trip}! tap to join: ${joinLink(i.agentNumber, i.code)} (or text "join ${i.code}" to ${i.agentNumber}). Roundup, an AI, sorts out the details with you 1:1.`
