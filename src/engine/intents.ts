@@ -86,6 +86,27 @@ export function textAfterCode(text: string, code: string): string {
   return i < 0 ? "" : text.slice(i + code.length).replace(/^[\s,.!-]+/, "").trim();
 }
 
+export interface PersonInput {
+  name: string | null;
+  phone: string; // raw; normalized by the caller
+}
+
+const PHONE_RE = /(\+?1[\s.-]?)?\(?\d{3}\)?[\s.-]?\d{3}[\s.-]?\d{4}/g;
+
+/** Phone numbers typed or pasted into a message, each with any name written next to it. */
+export function parsePeople(text: string): PersonInput[] {
+  const out: PersonInput[] = [];
+  for (const chunk of text.split(/[\n,;]+/)) {
+    const phones = chunk.match(PHONE_RE);
+    if (!phones) continue;
+    const words = chunk.replace(PHONE_RE, " ").replace(/\b(add|and|invite|also|plus|please|pls|number|is|her|his|their)\b/gi, " ")
+      .replace(/[^\p{L}\s'-]/gu, " ").trim().split(/\s+/).filter(Boolean);
+    const name = words[0] ? words[0][0].toUpperCase() + words[0].slice(1).toLowerCase() : null;
+    phones.forEach((p, i) => out.push({ name: i === 0 ? name : null, phone: p }));
+  }
+  return out;
+}
+
 export type OrganizerVerb = "start" | "status" | "plan" | null;
 
 export function organizerVerb(raw: string): OrganizerVerb {

@@ -174,6 +174,17 @@ sender's phone number or email when available.
 - The cloud provider needs a Node.js or Bun runtime (it uses gRPC). Do not target edge
   or worker runtimes.
 
+**Shared-pool allowlist (VERIFIED on real phones Oct 10, 2026)**
+- A number that is not a registered project **User** cannot reach the agent: its texts are
+  dropped before they reach our code, and sends to it fail with `Target not allowed`.
+- Each registered user is assigned their **own** pool line (`assignedPhoneNumber`), so two
+  people may text the agent at different numbers. One shared link/QR cannot work here.
+- Roundup registers people automatically via the Photon CLI (`npx photon login` once, then
+  `src/transport/registry.ts`) the first time it texts them. The organizer adds friends by
+  sharing contact cards or typing numbers; Roundup registers and invites each one.
+- A dedicated line (Business plan) removes the allowlist; then join-by-code/link/QR works
+  for anyone. Ask Photon staff (stretch goal S1).
+
 **UNVERIFIED, check docs before using**
 - The exact call for tapback reactions (the marketing site shows `message.react("like")`,
   but that snippet is illustrative).
@@ -519,7 +530,11 @@ re-run the affected chain the same way.
 1. A member's budget cap is never sent to another member, never to the organizer, and
    never shown on the dashboard. Only the group minimum is shared, under the rule in 9.6.
 2. Never forward or quote one member's message to another member.
-3. Only message people who texted the agent first. Never cold-text a number.
+3. Only message people who texted the agent first **or whom the organizer added** (contact
+   card or typed number). Never message anyone else. *Changed Oct 10, 2026:* on the shared
+   pool a number must be a registered project User before it can reach the agent at all,
+   so the organizer adding friends is the main way in. Every first message says it's an AI,
+   who added them, and how to stop. Anyone who said `stop` is never re-added.
 4. `stop` is honored immediately and permanently.
 5. The agent always identifies itself as an AI on first contact.
 6. Logs and the dashboard must not print full phone numbers. Show names, and mask numbers

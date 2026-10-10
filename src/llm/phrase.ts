@@ -1,7 +1,7 @@
 // Turns a MessageIntent into one short text. Every intent has a fixed template;
 // a few casual ones may be reworded by Gemini, with the template as the fallback.
 import type { AskTopic, MessageIntent } from "../types.js";
-import { clip, joinLink } from "../util.js";
+import { clip, joinLink, listNames } from "../util.js";
 import type { Llm } from "./gemini.js";
 import { phrasePrompt } from "./prompts.js";
 
@@ -54,6 +54,9 @@ export function template(i: MessageIntent): string {
     case "late_ack": return "thanks, got it!";
     case "noted_car": return "good to know, thanks! i'll keep that in mind.";
     case "all_set": return "you're all set for now. i'll text you if anything changes.";
+    case "invited": return `hey${i.name ? ` ${i.name}` : ""}! ${i.organizer} added you to ${i.trip}${i.date ? ` (${i.date})` : ""}. i'm Roundup, an AI helping plan it 1:1 so the group chat stays quiet. reply stop anytime.`;
+    case "people_added": return `added ${listNames(i.names)} and texted them${i.skipped ? ` (skipped ${i.skipped} already in or opted out)` : ""}. ${i.started ? "they'll get the questions now." : "send more anytime, or say start when everyone's in."}`;
+    case "add_needs_trip": return "start a trip first, then send me contacts. tell me what and when, like \"camping trip saturday\".";
   }
 }
 

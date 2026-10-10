@@ -34,6 +34,7 @@ export interface Member {
   staleAsk: Ask | null; // last question we gave up on; a late answer is still applied
   sentSinceReply: number; // messages sent since their last reply (cap of 2 for questions)
   lastPlan: string | null; // last plan text we sent, so updates only go to people whose plan changed
+  invited?: boolean; // added by the organizer (contact card or number) rather than joining by code
 }
 
 export interface Need {
@@ -120,7 +121,10 @@ export type MessageIntent =
   | { kind: "not_organizer"; organizer: string }
   | { kind: "late_ack" }
   | { kind: "noted_car" }
-  | { kind: "all_set" };
+  | { kind: "all_set" }
+  | { kind: "invited"; name: string; trip: string; organizer: string; date: string | null }
+  | { kind: "people_added"; names: string[]; skipped: number; started: boolean }
+  | { kind: "add_needs_trip" };
 
 export interface Outbound {
   phone: Phone;

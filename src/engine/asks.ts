@@ -60,6 +60,7 @@ export function askIntent(trip: Trip, m: Member, ask: Ask): MessageIntent {
   const need = trip.needs.find((n) => n.id === ask.needId);
   switch (ask.topic) {
     case "name":
+      if (m.invited) return { kind: "text", text: "what's your first name, by the way?" };
       return trip.organizer === m.phone
         ? { kind: "ask_name_organizer" }
         : { kind: "ask_name_member", trip: trip.title, organizer: organizerName(trip) };

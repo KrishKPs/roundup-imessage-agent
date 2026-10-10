@@ -8,7 +8,7 @@ import type { Ask, LogKind, Member, MessageIntent, Outbound, ParsedReply, Phone,
 import { clip, normalizePhone, parseName } from "../util.js";
 import { askIntent, enqueueAsk, itemLabel, resolvePending, sendNextQueued } from "./asks.js";
 import { applyChainAnswer, newNeed, recomputeSeats, releaseCommitments, runChain } from "./chain.js";
-import { type CommandEnv, handleCommand, optOut, sendTripCreated, welcome } from "./commands.js";
+import { type CommandEnv, addPeople, handleCommand, optOut, sendTripCreated, welcome } from "./commands.js";
 import { type Ctx, type EngineConfig, isGoing, organizerName, seatsNeed } from "./context.js";
 import { finalize } from "./plan.js";
 import { type SeedInput, buildDemoTrip } from "./seed.js";
@@ -71,6 +71,20 @@ export class Engine {
       await this.handleReply(trip, m, body);
       sendNextQueued(this.ctx, trip, m); // release anything held while they were quiet
       this.advance(trip);
+    });
+  }
+
+  /** The organizer shared contact cards in the chat: add and invite those people. */
+  handleContacts(rawPhone: string, people: { name: string | null; phone: string }[]): Promise<void> {
+    return this.run(async () => {
+      const phone = normalizePhone(rawPhone);
+      const env: CommandEnv = { ctx: this.ctx, state: this.state, resetState: () => this.deps.store.reset() };
+      const m = this.tripOf(phone)?.members[phone];
+      if (m?.optedOut) return;
+      if (m) m.sentSinceReply = 0;
+      addPeople(env, phone, people);
+      const t = this.tripOf(phone);
+      if (t) this.advance(t);
     });
   }
 

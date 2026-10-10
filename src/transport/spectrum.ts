@@ -27,15 +27,19 @@ export class SpectrumTransport implements Transport {
     return new SpectrumTransport(app, registry);
   }
 
-  /** Loop over inbound messages forever. `onText` runs inside the typing indicator. */
-  async listen(onText: (phone: Phone, text: string) => Promise<void>): Promise<void> {
+  /** Loop over inbound messages forever. Handlers run inside the typing indicator. */
+  async listen(
+    onText: (phone: Phone, text: string) => Promise<void>,
+    onContacts: (phone: Phone, people: { name: string | null; phone: string }[]) => Promise<void>,
+  ): Promise<void> {
     let loggedSender = false;
     for await (const [space, message] of this.app.messages) {
       try {
         if (message.platform !== "imessage") continue;
         const im = imessage(space);
         if (im.type !== "dm") continue; // MVP is DM-only (shared pool has no groups)
-        if (message.content.type !== "text") continue;
+        const kind = message.content.type;
+        if (kind !== "text" && kind !== "contact") continue;
         const sender = imessage(message).sender;
         const raw = sender?.address ?? message.sender?.id;
         if (!loggedSender) {
@@ -50,6 +54,14 @@ export class SpectrumTransport implements Transport {
         if (!raw) continue;
         const phone = normalizePhone(String(raw));
         this.spaces.set(phone, space as unknown as SpaceLike);
+        if (message.content.type === "contact") {
+          const people = contactPeople(message.content);
+          console.log(`[in]  ${maskPhone(phone)}: contact card with ${people.length} number(s)`);
+          await space.responding(async () => {
+            await onContacts(phone, people);
+          });
+          continue;
+        }
         const text = message.content.text;
         console.log(`[in]  ${maskPhone(phone)}: ${text.length} chars`);
         await space.responding(async () => {
@@ -78,4 +90,17 @@ export class SpectrumTransport implements Transport {
   async stop(): Promise<void> {
     await this.app.stop();
   }
+}
+
+/** Pull names and phone numbers out of a shared contact card. Each card is one person (first mobile number). */
+function contactPeople(content: unknown): { name: string | null; phone: string }[] {
+  const c = content as {
+    name?: { first?: string; formatted?: string };
+    phones?: { value?: string; type?: string }[];
+  };
+  const phones = (c.phones ?? []).filter((p) => p.value);
+  const best = phones.find((p) => /mobile|cell|iphone/i.test(p.type ?? "")) ?? phones[0];
+  if (!best?.value) return [];
+  const first = (c.name?.first || c.name?.formatted?.split(/\s+/)[0] || "").trim();
+  return [{ name: first || null, phone: best.value }];
 }

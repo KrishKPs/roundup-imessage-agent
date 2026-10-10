@@ -64,4 +64,7 @@ async function shutdown() {
 process.on("SIGINT", shutdown);
 process.on("SIGTERM", shutdown);
 
-await transport.listen((phone, text) => engine.handleInbound(phone, text));
+await transport.listen(
+  (phone, text) => engine.handleInbound(phone, text),
+  (phone, people) => engine.handleContacts(phone, people),
+);

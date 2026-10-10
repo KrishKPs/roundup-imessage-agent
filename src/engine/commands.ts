@@ -1,11 +1,11 @@
 // Exact text commands (spec 8), matched in code before any LLM call.
 import type { Member, Phone, State, Trip } from "../types.js";
-import { newId, parseName } from "../util.js";
+import { newId, normalizePhone, parseName } from "../util.js";
 import { enqueueAsk } from "./asks.js";
 import { newNeed, releaseCommitments } from "./chain.js";
 import { type Ctx, goingMembers, organizerName, seatsNeed } from "./context.js";
 import { budgetAnsweredCount, finalize } from "./plan.js";
-import { findJoinCode, organizerVerb, parseTripRequest, textAfterCode } from "./intents.js";
+import { findJoinCode, organizerVerb, parsePeople, parseTripRequest, textAfterCode } from "./intents.js";
 
 export function newMember(phone: Phone, name: string, now: number): Member {
   return {
@@ -68,6 +68,13 @@ export function handleCommand(env: CommandEnv, phone: Phone, text: string): bool
   }
   if (/^join\b/i.test(t) && !trip?.members[phone]) {
     ctx.out(phone, { kind: "unknown_code" });
+    return true;
+  }
+
+  // Organizer typed or pasted phone numbers: add those people.
+  const typed = parsePeople(t);
+  if (typed.length && trip?.members[phone]) {
+    addPeople(env, phone, typed);
     return true;
   }
 
@@ -170,10 +177,17 @@ function joinTrip(env: CommandEnv, phone: Phone, code: string, givenName: string
 
 /** First contact: always says it's an AI (spec 10.5). Then asks RSVP if the trip is already moving. */
 export function welcome(ctx: Ctx, trip: Trip, m: Member): void {
-  ctx.out(m.phone, { kind: "intro", name: m.name, trip: trip.title, organizer: organizerName(trip) });
   ctx.log(trip, "joined", `${m.name} joined`);
-  if (trip.status === "collecting_members") ctx.out(m.phone, { kind: "waiting_for_start", organizer: organizerName(trip) });
-  else enqueueAsk(ctx, trip, m, "rsvp");
+  const waiting = trip.status === "collecting_members";
+  if (m.invited) {
+    // They already got the AI intro with the invite; keep it to one short line.
+    const rest = waiting ? ` i'll text you once ${organizerName(trip)} kicks things off.` : "";
+    ctx.out(m.phone, { kind: "text", text: `nice to meet you ${m.name}!${rest}` });
+  } else {
+    ctx.out(m.phone, { kind: "intro", name: m.name, trip: trip.title, organizer: organizerName(trip) });
+    if (waiting) ctx.out(m.phone, { kind: "waiting_for_start", organizer: organizerName(trip) });
+  }
+  if (!waiting) enqueueAsk(ctx, trip, m, "rsvp");
 }
 
 export function optOut(ctx: Ctx, trip: Trip, m: Member): void {
@@ -200,4 +214,42 @@ export function statusText(trip: Trip): string {
   const b = budgetAnsweredCount(trip);
   parts.push(`budget ${b.answered}/${b.total} answered`);
   return `${parts.join(", ")}.`;
+}
+
+/**
+ * The organizer shares contact cards or types numbers: register and invite each person (spec 10.3, as amended:
+ * Roundup only texts people the organizer added or who texted first, and the first text says it's an AI).
+ */
+export function addPeople(env: CommandEnv, phone: Phone, people: { name: string | null; phone: string }[]): void {
+  const { ctx, state } = env;
+  const trip = state.phoneTrip[phone] ? state.trips[state.phoneTrip[phone]] : undefined;
+  if (!trip?.members[phone]) {
+    ctx.out(phone, { kind: "add_needs_trip" });
+    return;
+  }
+  if (trip.organizer !== phone) {
+    ctx.out(phone, { kind: "not_organizer", organizer: organizerName(trip) });
+    return;
+  }
+  const optedOutAnywhere = (p: Phone) => Object.values(state.trips).some((t) => t.members[p]?.optedOut);
+  const added: string[] = [];
+  let skipped = 0;
+  for (const person of people) {
+    const p = normalizePhone(person.phone);
+    if (p === phone || trip.members[p] || optedOutAnywhere(p)) {
+      skipped += 1;
+      continue;
+    }
+    const name = person.name ?? knownName(state, p);
+    const m = newMember(p, name, ctx.now());
+    m.invited = true;
+    trip.members[p] = m;
+    state.phoneTrip[p] = trip.id;
+    ctx.out(p, { kind: "invited", name, trip: trip.title, organizer: organizerName(trip), date: trip.dateText });
+    ctx.log(trip, "joined", `${organizerName(trip)} added ${name || "someone"}`);
+    if (!name) enqueueAsk(ctx, trip, m, "name");
+    else if (trip.status !== "collecting_members") enqueueAsk(ctx, trip, m, "rsvp");
+    added.push(name || "1 person");
+  }
+  ctx.out(phone, { kind: "people_added", names: added.length ? added : ["nobody new"], skipped, started: trip.status !== "collecting_members" });
 }
