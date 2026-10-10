@@ -12,6 +12,8 @@ const schema = z.object({
   SPECTRUM_PROJECT_SECRET: z.string().min(1, "SPECTRUM_PROJECT_SECRET is missing. Copy it from the Photon dashboard Settings page into .env."),
   GEMINI_API_KEY: z.string().optional().default(""),
   GEMINI_MODEL: z.string().optional().default(""),
+  ANTHROPIC_API_KEY: z.string().optional().default(""), // if set, Claude is used instead of Gemini
+  ANTHROPIC_MODEL: z.string().optional().default("claude-opus-5-5"),
   PORT: z.coerce.number().int().positive().default(3000),
   NUDGE_AFTER_SECONDS: z.coerce.number().positive().default(120),
   GIVE_UP_AFTER_SECONDS: z.coerce.number().positive().default(240),
@@ -40,8 +42,8 @@ export function loadConfig(opts: { requireSpectrum: boolean } = { requireSpectru
     process.exit(1);
   }
   const cfg = parsed.data;
-  if (!cfg.GEMINI_API_KEY || !cfg.GEMINI_MODEL) {
-    console.warn("[config] GEMINI_API_KEY or GEMINI_MODEL not set. Using keyword parsing and fixed templates only.");
+  if (!cfg.ANTHROPIC_API_KEY && (!cfg.GEMINI_API_KEY || !cfg.GEMINI_MODEL)) {
+    console.warn("[config] no ANTHROPIC_API_KEY or GEMINI_API_KEY set. Using keyword parsing and fixed templates only.");
   }
   return cfg;
 }

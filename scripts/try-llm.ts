@@ -1,20 +1,21 @@
 // Runs a handful of real-world texts through Gemini (no phones, no Photon) so we can read and tune the replies.
-// Usage: npm run try-llm   (needs GEMINI_API_KEY and GEMINI_MODEL in .env)
+// Usage: npm run try-llm   (needs ANTHROPIC_API_KEY, or GEMINI_API_KEY + GEMINI_MODEL, in .env)
 import { loadConfig } from "../src/config.js";
 import { Engine } from "../src/engine/engine.js";
 import { makeConverser } from "../src/llm/converse.js";
-import { makeGemini } from "../src/llm/gemini.js";
+import { llmName, pickLlm } from "../src/llm/pick.js";
 import { makePhraser } from "../src/llm/phrase.js";
 import { makeUnderstander } from "../src/llm/understand.js";
 import { Store } from "../src/store.js";
 import { FakeTransport } from "../src/transport/fake.js";
 
 const cfg = loadConfig({ requireSpectrum: false });
-const llm = makeGemini(cfg.GEMINI_API_KEY, cfg.GEMINI_MODEL, 5000);
+const llm = pickLlm(cfg, 5000);
 if (!llm) {
-  console.error("Set GEMINI_API_KEY and GEMINI_MODEL in .env first.");
+  console.error("Set ANTHROPIC_API_KEY (or GEMINI_API_KEY + GEMINI_MODEL) in .env first.");
   process.exit(1);
 }
+console.log(`model: ${llmName(cfg)}`);
 const transport = new FakeTransport();
 const names: Record<string, string> = { "+19195550100": "Krish", "+19195550101": "Sam", "+19195550102": "Maya" };
 transport.onSend = (m) => console.log(`   -> ${names[m.phone]}: ${m.text}`);

@@ -3,7 +3,7 @@
 import { loadConfig } from "./config.js";
 import { startDashboard } from "./dashboard/server.js";
 import { Engine } from "./engine/engine.js";
-import { makeGemini } from "./llm/gemini.js";
+import { llmName, pickLlm } from "./llm/pick.js";
 import { makePhraser } from "./llm/phrase.js";
 import { makeUnderstander } from "./llm/understand.js";
 import { makeTripExtractor } from "./llm/tripRequest.js";
@@ -14,8 +14,9 @@ import { startTunnel } from "./tunnel.js";
 
 const cfg = loadConfig();
 const store = new Store("data/state.json");
-const understandLlm = makeGemini(cfg.GEMINI_API_KEY, cfg.GEMINI_MODEL, 5000);
-const phraseLlm = makeGemini(cfg.GEMINI_API_KEY, cfg.GEMINI_MODEL, 2500); // shorter: replies must land in < 4 s
+const understandLlm = pickLlm(cfg, 5000);
+const phraseLlm = pickLlm(cfg, 2500); // shorter: replies must land in < 4 s
+console.log(`[llm] model: ${llmName(cfg)}`);
 
 // cloud = Photon's managed lines; local = this Mac's Messages app (can text people first). Both are Spectrum.
 const local = cfg.IMESSAGE_MODE === "local";
