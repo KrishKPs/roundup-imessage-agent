@@ -70,7 +70,7 @@ export function askIntent(trip: Trip, m: Member, ask: Ask): MessageIntent {
     case "drive": return { kind: "ask_drive", name: m.name, trip: trip.title };
     case "seats": return { kind: "ask_seats", name: m.name };
     case "item": return { kind: "ask_item", name: m.name, item: need?.label ?? "something", trip: trip.title };
-    case "poll": return { kind: "ask_poll", organizer: organizerName(trip), question: trip.poll?.question ?? "does the plan work for you?" };
+    case "poll": return { kind: "ask_poll", organizer: organizerName(trip), question: trip.poll?.question ?? "does the plan work for you?", open: !!trip.poll?.open };
   }
 }
 

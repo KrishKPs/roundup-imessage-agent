@@ -2,7 +2,7 @@
 // Never another member's budget, never anyone's phone number. The AI may only say what is in here.
 import type { Member, Trip } from "../types.js";
 import { type Ctx, byJoin, nameOf, seatsNeed } from "./context.js";
-import { pollSummary } from "./poll.js";
+import { pollResults } from "./poll.js";
 import { assignSeats, budgetAnsweredCount, groupBudget } from "./plan.js";
 
 const names = (ms: Member[]) => ms.map((m) => m.name || "someone").join(", ") || "nobody";
@@ -46,7 +46,13 @@ export function factsFor(trip: Trip, me: Member, _ctx: Ctx): string {
   lines.push(own.join("; "));
 
   if (isOrganizer) {
-    if (trip.poll) lines.push(`your question to everyone: ${pollSummary(trip)}`);
+    if (trip.poll) {
+      // The organizer asked for these answers, so they (and only they) may see them, to find a common option.
+      const { answers, silent } = pollResults(trip);
+      lines.push(`your last question to everyone: "${trip.poll.question}"`);
+      for (const a of answers) lines.push(`  ${a.name} answered: ${a.answer}`);
+      if (silent.length) lines.push(`  no answer yet from: ${silent.join(", ")}`);
+    }
     const notIn = people.filter((m) => (m.viaLink || m.invited) && !m.heardFrom);
     if (notIn.length) lines.push(`signed up but haven't texted in yet: ${names(notIn)}`);
   }

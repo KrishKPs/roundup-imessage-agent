@@ -186,7 +186,7 @@ export class Engine {
       switch (res.action) {
         case "ask_everyone":
           if (!res.question) break;
-          startPoll(ctx, trip, `${res.question.trim().replace(/[?!.\s]+$/, "")}?`);
+          startPoll(ctx, trip, `${res.question.trim().replace(/[?!.\s]+$/, "")}?`, res.open ?? undefined);
           return true;
         case "status": return handleCommand(env, m.phone, "status");
         case "start": return handleCommand(env, m.phone, "start");
@@ -281,6 +281,15 @@ export class Engine {
       return;
     }
 
+    // An open question from the organizer ("which days are you free?"): their words are the answer.
+    if (ask?.topic === "poll" && trip.poll?.open && ask.pollId === trip.poll.id && !/\?\s*$/.test(text)
+        && keywordParse(text, null).intent !== "drop") {
+      recordPollAnswer(this.ctx, trip, m, ask, text);
+      if (!isStale) resolvePending(this.ctx, trip, m);
+      else m.staleAsk = null;
+      return;
+    }
+
     // If the keywords can't read this, the model will be needed; start the conversation call now, in parallel.
     this.prefetched = this.deps.converse && keywordParse(text, ask?.topic ?? null).confidence < 0.85
       ? this.deps.converse(this.converseInput(trip, m, text))
@@ -324,7 +333,7 @@ export class Engine {
     }
 
     if (ask.topic === "poll") {
-      const value = parsed.rsvp ?? (parsed.itemYes === null ? "maybe" : parsed.itemYes ? "yes" : "no");
+      const value: string = parsed.rsvp ?? (parsed.itemYes === null ? "maybe" : parsed.itemYes ? "yes" : "no");
       recordPollAnswer(ctx, trip, m, ask, value); // thank them before any next question
       close();
       return;
@@ -391,6 +400,10 @@ export class Engine {
   private async answerQuestion(trip: Trip, m: Member, text: string): Promise<void> {
     const ctx = this.ctx;
     if (await this.talk(trip, m, text)) return;
+    if (m.phone === trip.organizer && this.deps.converse) {
+      ctx.out(m.phone, { kind: "text", text: "sorry, i blanked on that one. mind sending it again?" });
+      return;
+    }
     if (m.phone === trip.organizer) {
       // The organizer isn't asking us about their own trip; show them what we can do for them.
       ctx.out(m.phone, { kind: "organizer_help" });
@@ -448,6 +461,7 @@ export class Engine {
       return;
     }
     if (await this.talk(trip, m, text)) return;
+    if (m.phone === trip.organizer && this.deps.converse) return ctx.out(m.phone, { kind: "text", text: "sorry, i blanked on that one. mind sending it again?" });
     if (m.phone === trip.organizer) return ctx.out(m.phone, { kind: "organizer_help" });
     ctx.out(m.phone, trip.status === "collecting_members"
       ? { kind: "waiting_for_start", organizer: organizerName(trip) }

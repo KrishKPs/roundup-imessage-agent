@@ -53,4 +53,24 @@ describe("organizer asks everyone", () => {
     expect(h.transport.to(sam)).toEqual(["only Krish can do that one."]);
     expect(h.transport.to(maya)).toHaveLength(0);
   });
+
+  it("open questions take any answer and report each person's words", async () => {
+    const { h, org, sam, maya, leo } = await campTrip();
+    await h.say(org, "ask everyone which days between saturday and tuesday are you free, and what times work best");
+    expect(h.transport.to(sam)).toEqual(["quick q from Krish: which days between saturday and tuesday are you free, and what times work best?"]);
+    await h.say(sam, "sat after 2 or sunday all day");
+    await h.say(maya, "only sunday");
+    expect(h.transport.to(maya).at(-1)).toBe("got it, i'll let Krish know.");
+    await h.say(leo, "sunday morning");
+    expect(h.transport.to(org).at(-1)).toBe('"which days between saturday and tuesday are you free, and what times work best?" Sam: sat after 2 or sunday all day; Maya: only sunday; Leo: sunday morning');
+  });
+
+  it("a new question replaces an unanswered old one right away", async () => {
+    const { h, org, sam } = await campTrip();
+    await h.say(org, "ask everyone does 10am saturday work");
+    await h.say(org, "ask everyone what can you bring");
+    expect(h.transport.to(sam).at(-1)).toBe("quick q from Krish: what can you bring?");
+    await h.say(sam, "a tent and snacks");
+    expect(h.trip().poll!.answers[sam]).toBe("a tent and snacks");
+  });
 });

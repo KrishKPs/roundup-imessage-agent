@@ -23,7 +23,8 @@ const memberActions = ["reply", "pass_to_organizer"] as const;
 
 const schema = z.object({
   action: z.enum([...organizerActions, ...memberActions]),
-  question: z.string().max(140).nullable().optional(), // ask_everyone
+  question: z.string().max(160).nullable().optional(), // ask_everyone
+  open: z.boolean().nullable().optional(), // ask_everyone: true = free-text answers, false = yes/no
   items: z.array(z.string().max(30)).max(6).nullable().optional(), // add_items
   date: z.string().max(40).nullable().optional(), // set_date
   reply: z.string().max(300).nullable().optional(),
@@ -37,8 +38,8 @@ function prompt(i: ConverseInput): string {
     ? i.history.map((t) => `${t.from === "bot" ? "Roundup" : i.name || "them"}: ${t.text}`).join("\n")
     : "(no earlier messages)";
   const actions = i.role === "organizer"
-    ? `- "reply": just answer or chat (use for questions about the trip, thanks, small talk).
-- "ask_everyone": they want a question put to every member (works anytime, even before start). Put the question, phrased to the members, in "question" (e.g. "does 10am saturday work?").
+    ? `- "reply": just answer or chat (questions about the trip, thanks, small talk). If they ask about the answers to their question (e.g. "what time works for everyone?"), work it out from the answers in TRIP FACTS: give the option that fits the most people and who it doesn't work for.
+- "ask_everyone": they want a NEW question put to every member (works anytime, even before start). Put the question, phrased to the members, in "question" (e.g. "does 10am saturday work?" or "which days between sat and tue are you free, and what times?"). Set "open": true if it needs a free-text answer (days, times, what to bring), false if yes/no. Don't re-ask a question that's already been answered; use "reply" with the answers instead.
 - "status": they want an update on who's in / what's left.
 - "start": they say everyone's in and want to kick things off.
 - "send_plans": they want to wrap up and send everyone their plans now.
@@ -61,10 +62,10 @@ THEIR NEW MESSAGE: "${i.text.replace(/"/g, "'")}"
 Pick exactly one action:
 ${actions}
 
-Reply style: like a friend texting. lowercase ok. 1-2 short sentences, under 150 characters. at most one emoji, usually none.
+Reply style: like a friend texting. lowercase ok. 1-2 short sentences, under 200 characters. at most one emoji, usually none.
 Hard rules: never invent details that aren't in TRIP FACTS (no times, places, prices, names). never reveal anyone's budget except their own. never say you'll do something not in the action list. don't ask them questions (the app asks its own questions at the right time); just answer or acknowledge. don't repeat your last message, and don't greet them again mid-conversation. write names and the trip name exactly as given.
 
-Return JSON only: {"action": string, "question": string|null, "items": string[]|null, "date": string|null, "reply": string|null}`;
+Return JSON only: {"action": string, "question": string|null, "open": boolean|null, "items": string[]|null, "date": string|null, "reply": string|null}`;
 }
 
 export function makeConverser(llm: Llm | null): Converser | undefined {
@@ -75,7 +76,7 @@ export function makeConverser(llm: Llm | null): Converser | undefined {
       const out = schema.parse(JSON.parse(raw.replace(/```(?:json)?/gi, "").trim()));
       const allowed: readonly string[] = input.role === "organizer" ? organizerActions : memberActions;
       if (!allowed.includes(out.action)) return null;
-      if (out.reply) out.reply = clip(out.reply);
+      if (out.reply) out.reply = clip(out.reply, 220);
       return out;
     } catch (err) {
       console.warn(`[converse] LLM failed: ${(err as Error).message}`);

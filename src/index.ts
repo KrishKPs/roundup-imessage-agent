@@ -42,7 +42,7 @@ const engine = new Engine({
   },
   onChange: () => dashboard?.broadcast(),
   extractTrip: makeTripExtractor(understandLlm),
-  converse: makeConverser(understandLlm),
+  converse: makeConverser(pickLlm(cfg, 10000)), // the reply they're waiting for: worth a few more seconds than a canned answer
 });
 
 const tunnel = cfg.TUNNEL && !cfg.PUBLIC_URL ? startTunnel(cfg.PORT) : null;

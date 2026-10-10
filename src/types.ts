@@ -21,9 +21,10 @@ export interface Trip {
 export interface Poll {
   id: string;
   question: string;
+  open?: boolean; // free-text answers ("which days are you free?") instead of yes/no/maybe
   askedAt: number;
   asked: Phone[];
-  answers: Record<Phone, "yes" | "no" | "maybe">;
+  answers: Record<Phone, string>; // "yes"/"no"/"maybe", or their own words for open questions
   reported: boolean;
 }
 
@@ -143,7 +144,8 @@ export type MessageIntent =
   | { kind: "add_needs_trip" }
   | { kind: "ask_what_planning" }
   | { kind: "organizer_ready"; name: string; trip: string }
-  | { kind: "ask_poll"; organizer: string; question: string }
+  | { kind: "ask_poll"; organizer: string; question: string; open: boolean }
+  | { kind: "poll_report"; question: string; open: boolean; answers: { name: string; answer: string }[]; silent: string[] }
   | { kind: "organizer_help" }
   | { kind: "pair"; first: MessageIntent; second: MessageIntent }; // a quick ack + the next message, sent as one text
 

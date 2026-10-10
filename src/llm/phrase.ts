@@ -1,6 +1,7 @@
 // Turns a MessageIntent into one short text. Every intent has a fixed template;
 // a few casual ones may be reworded by Gemini, with the template as the fallback.
 import type { AskTopic, MessageIntent } from "../types.js";
+import { summarizeAnswers } from "../engine/poll.js";
 import { clip, joinLink, listNames } from "../util.js";
 import type { Llm } from "./gemini.js";
 import { phrasePrompt } from "./prompts.js";
@@ -68,7 +69,8 @@ export function template(i: MessageIntent): string {
     case "people_added": return `added ${listNames(i.names)}, texting them now${i.skipped ? ` (skipped ${i.skipped} already in or opted out)` : ""}. ${i.started ? "they'll get the questions now." : "send more anytime, or say start when everyone's in."}`;
     case "ask_what_planning": return "hey! i'm Roundup, an AI that plans group trips over text. what are you planning, and when? anything works. got a code from a friend? just send it.";
     case "organizer_ready": return `hey ${i.name}! i'm Roundup, an AI planning ${i.trip} with you. share your link in the group chat, then text start when everyone's in.`;
-    case "ask_poll": return `quick q from ${i.organizer}: ${i.question} yes, no, or maybe`;
+    case "ask_poll": return i.open ? `quick q from ${i.organizer}: ${i.question}` : `quick q from ${i.organizer}: ${i.question} yes, no, or maybe`;
+    case "poll_report": return summarizeAnswers(i.question, i.open, i.answers, i.silent);
     case "pair": return `${template(i.first)} ${template(i.second)}`;
     case "organizer_help": return `i can ask everyone for you, just text "ask everyone" and your question. or text status, start, or need cooler.`;
     case "add_needs_trip": return "start a trip first, then send me contacts. tell me what and when, like \"camping trip saturday\".";
@@ -108,6 +110,7 @@ const LLM_OK = new Set<MessageIntent["kind"]>([
 export function makePhraser(llm: Llm | null): Phraser {
   return async (intent, history = []) => {
     const draft = template(intent);
+    if (intent.kind === "poll_report") return llm ? summarizePoll(llm, intent, draft) : draft;
     const rewordable = LLM_OK.has(intent.kind) || (intent.kind === "pair" && LLM_OK.has(intent.second.kind));
     if (!llm || !rewordable) return intent.kind === "text" || intent.kind === "invite_line" ? draft : clip(draft);
     try {
@@ -136,4 +139,26 @@ export function isSafeRewrite(draft: string, out: string, intent?: MessageIntent
   }
   const draftNums = new Set(draft.match(/\d+/g) ?? []);
   return (out.match(/\d+/g) ?? []).every((n) => draftNums.has(n));
+}
+
+/**
+ * The organizer's question came back: summarize what people said in plain words and point out the option that
+ * works for the most people. Falls back to the raw list if the model fails or adds numbers nobody said.
+ */
+async function summarizePoll(llm: Llm, i: Extract<MessageIntent, { kind: "poll_report" }>, draft: string): Promise<string> {
+  const answers = i.answers.map((a) => `${a.name}: ${a.answer}`).join("\n") || "(nobody answered)";
+  const prompt = `You are Roundup, texting the trip organizer on iMessage. You asked everyone: "${i.question}"
+Answers:
+${answers}
+${i.silent.length ? `No answer from: ${i.silent.join(", ")}` : "Everyone you asked has answered."}
+
+Write one text (under 300 characters) summarizing the answers like a friend would. ${i.open ? "If there's an option that works for everyone or most people, say it first and name anyone it doesn't work for." : "Give the yes/no count and name the no's."} ${i.silent.length ? "Mention who didn't answer." : ""} Use only what's in the answers. No questions. Casual texting style, lowercase is fine. Reply with only the text.`;
+  try {
+    const out = clip((await llm.generate(prompt)).trim().replace(/^["']|["']$/g, ""), 320);
+    const known = new Set(`${i.question} ${answers}`.match(/\d+/g) ?? []);
+    const grounded = (out.match(/\d+/g) ?? []).every((n) => known.has(n) || Number(n) === i.answers.length || Number(n) === i.silent.length);
+    return grounded && out.length > 10 ? out : draft;
+  } catch {
+    return draft;
+  }
 }
