@@ -58,7 +58,7 @@ export function template(i: MessageIntent): string {
     case "help": return "hey! i'm Roundup, an AI that plans group trips over text. planning something? tell me what and when, like \"camping trip saturday\". got a code? just send it.";
     case "already_member": return `you're already in ${i.trip}!`;
     case "waiting_for_start": return `you're all set! i'll text you once ${i.organizer} kicks things off.`;
-    case "started_organizer": return `we're rolling! i'm texting all ${i.count} people now. text status anytime.`;
+    case "started_organizer": return `we're rolling! i'm texting ${i.count === 1 ? "them" : i.count === 2 ? "both of them" : `all ${i.count} people`} now. text status anytime.`;
     case "needs_added": return `added: ${i.items.join(", ")}. i'll find people to bring them.`;
     case "not_organizer": return `only ${i.organizer} can do that one.`;
     case "late_ack": return "thanks, got it!";
@@ -69,6 +69,7 @@ export function template(i: MessageIntent): string {
     case "ask_what_planning": return "hey! i'm Roundup, an AI that plans group trips over text. what are you planning, and when? anything works. got a code from a friend? just send it.";
     case "organizer_ready": return `hey ${i.name}! i'm Roundup, an AI planning ${i.trip} with you. share your link in the group chat, then text start when everyone's in.`;
     case "ask_poll": return `quick q from ${i.organizer}: ${i.question} yes, no, or maybe`;
+    case "pair": return `${template(i.first)} ${template(i.second)}`;
     case "organizer_help": return `i can ask everyone for you, just text "ask everyone" and your question. or text status, start, or need cooler.`;
     case "add_needs_trip": return "start a trip first, then send me contacts. tell me what and when, like \"camping trip saturday\".";
   }
@@ -100,14 +101,15 @@ function ackText(topic: AskTopic, value: "yes" | "no" | "maybe" | "skip" | "done
  */
 const LLM_OK = new Set<MessageIntent["kind"]>([
   "ask_rsvp", "ask_drive", "ask_item", "ask_budget", "ask_seats", "ask_poll", "nudge", "reask", "drop_ack", "ack",
-  "intro", "invited", "waiting_for_start", "all_set", "late_ack", "noted_car", "handoff_member", "organizer_drop",
+  "waiting_for_start", "all_set", "late_ack", "noted_car", "handoff_member", "organizer_drop",
   "needs_added", "question_answer", "already_member",
 ]);
 
 export function makePhraser(llm: Llm | null): Phraser {
   return async (intent, history = []) => {
     const draft = template(intent);
-    if (!llm || !LLM_OK.has(intent.kind)) return intent.kind === "text" || intent.kind === "invite_line" ? draft : clip(draft);
+    const rewordable = LLM_OK.has(intent.kind) || (intent.kind === "pair" && LLM_OK.has(intent.second.kind));
+    if (!llm || !rewordable) return intent.kind === "text" || intent.kind === "invite_line" ? draft : clip(draft);
     try {
       const out = clip((await llm.generate(phrasePrompt(intent, draft, history))).trim().replace(/^["']|["']$/g, ""));
       return isSafeRewrite(draft, out, intent) ? out : clip(draft);
@@ -124,8 +126,14 @@ export function isSafeRewrite(draft: string, out: string, intent?: MessageIntent
   if ((out.match(/\?/g) ?? []).length > 1) return false; // one question per message
   if (/\bAI\b/.test(draft) && !/\bAI\b/i.test(out)) return false; // first contact must say it's an AI
   if (/\bstop\b/i.test(draft) && !/\bstop\b/i.test(out)) return false;
-  const trip = intent && "trip" in intent ? intent.trip : null;
+  const facts = intent?.kind === "pair" ? intent.second : intent;
+  const trip = facts && "trip" in facts ? facts.trip : null;
   if (trip && draft.includes(trip) && !out.toLowerCase().includes(trip.toLowerCase())) return false;
+  // Names keep their capitals ("Krish", not "krish").
+  for (const key of ["name", "organizer"] as const) {
+    const v = facts && key in facts ? (facts as Record<string, unknown>)[key] : null;
+    if (typeof v === "string" && v && out.toLowerCase().includes(v.toLowerCase()) && !out.includes(v)) return false;
+  }
   const draftNums = new Set(draft.match(/\d+/g) ?? []);
   return (out.match(/\d+/g) ?? []).every((n) => draftNums.has(n));
 }

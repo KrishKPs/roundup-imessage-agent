@@ -7,14 +7,14 @@ import { assignSeats, budgetAnsweredCount, groupBudget } from "./plan.js";
 
 const names = (ms: Member[]) => ms.map((m) => m.name || "someone").join(", ") || "nobody";
 
-export function factsFor(trip: Trip, me: Member, ctx: Ctx): string {
+export function factsFor(trip: Trip, me: Member, _ctx: Ctx): string {
   const people = byJoin(trip).filter((m) => !m.optedOut);
   const isOrganizer = me.phone === trip.organizer;
   const lines = [
     `trip: ${trip.title}`,
     `date: ${trip.dateText ?? "not set yet"}`,
     `organizer: ${nameOf(trip, trip.organizer)}`,
-    `stage: ${trip.status === "collecting_members" ? "people are still joining; questions start when the organizer says start" : trip.status === "coordinating" ? "sorting out who's in, rides, and what to bring" : "plans have been sent"}`,
+    `stage: ${trip.status === "collecting_members" ? "people are still joining; the rsvp/budget/ride questions go out when the organizer texts start (the organizer can ask everyone something anytime)" : trip.status === "coordinating" ? "sorting out who's in, rides, and what to bring" : "plans have been sent"}`,
     `going: ${names(people.filter((m) => m.rsvp === "yes"))}`,
     `maybe: ${names(people.filter((m) => m.rsvp === "maybe"))}`,
     `not coming: ${names(people.filter((m) => m.rsvp === "no"))}`,
@@ -50,6 +50,5 @@ export function factsFor(trip: Trip, me: Member, ctx: Ctx): string {
     const notIn = people.filter((m) => (m.viaLink || m.invited) && !m.heardFrom);
     if (notIn.length) lines.push(`signed up but haven't texted in yet: ${names(notIn)}`);
   }
-  lines.push(`now: ${new Date(ctx.now()).toLocaleString("en-US", { weekday: "long", hour: "numeric", minute: "2-digit" })}`);
   return lines.join("\n");
 }

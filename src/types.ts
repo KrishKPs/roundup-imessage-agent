@@ -144,7 +144,8 @@ export type MessageIntent =
   | { kind: "ask_what_planning" }
   | { kind: "organizer_ready"; name: string; trip: string }
   | { kind: "ask_poll"; organizer: string; question: string }
-  | { kind: "organizer_help" };
+  | { kind: "organizer_help" }
+  | { kind: "pair"; first: MessageIntent; second: MessageIntent }; // a quick ack + the next message, sent as one text
 
 export interface Outbound {
   phone: Phone;

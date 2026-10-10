@@ -3,13 +3,15 @@
 import type { Phraser } from "../llm/phrase.js";
 import type { Understander } from "../llm/understand.js";
 import type { TripExtractor } from "../llm/tripRequest.js";
-import { type Converser, type Turn, replyIsGrounded } from "../llm/converse.js";
+import { type ConverseInput, type ConverseResult, type Converser, type Turn, replyIsGrounded } from "../llm/converse.js";
+import { keywordParse } from "../llm/understand.js";
 import { factsFor } from "./facts.js";
 import { titleFromAnything } from "./intents.js";
 import type { Store } from "../store.js";
 import type { Transport } from "../transport/transport.js";
 import type { Ask, LogKind, Member, MessageIntent, Outbound, ParsedReply, Phone, Trip } from "../types.js";
 import { clip, normalizePhone, parseName } from "../util.js";
+import { template } from "../llm/phrase.js";
 import { askIntent, enqueueAsk, itemLabel, resolvePending, sendNextQueued } from "./asks.js";
 import { applyChainAnswer, newNeed, recomputeSeats, releaseCommitments, runChain } from "./chain.js";
 import {
@@ -109,7 +111,7 @@ export class Engine {
       await this.handleReply(trip, m, body);
       sendNextQueued(this.ctx, trip, m); // release anything held while they were quiet
       this.advance(trip);
-    });
+    }, normalizePhone(rawPhone));
   }
 
   /** The organizer shared contact cards in the chat: add and invite those people. */
@@ -144,6 +146,15 @@ export class Engine {
     return title;
   }
 
+  private prefetched: Promise<ConverseResult | null> | null = null;
+
+  private converseInput(trip: Trip, m: Member, text: string): ConverseInput {
+    return {
+      role: m.phone === trip.organizer ? "organizer" : "member", name: m.name, text,
+      facts: factsFor(trip, m, this.ctx), history: this.historyOf(m.phone).slice(-9, -1),
+    };
+  }
+
   private historyOf(phone: Phone): Turn[] {
     return this.state.history?.[phone] ?? [];
   }
@@ -164,10 +175,10 @@ export class Engine {
     if (!this.deps.converse) return false;
     const ctx = this.ctx;
     const isOrganizer = m.phone === trip.organizer;
-    const facts = factsFor(trip, m, ctx);
-    const res = await this.deps.converse({
-      role: isOrganizer ? "organizer" : "member", name: m.name, text, facts, history: this.historyOf(m.phone).slice(-9, -1),
-    });
+    const input = this.converseInput(trip, m, text);
+    const facts = input.facts;
+    const res = await (this.prefetched ?? this.deps.converse(input));
+    this.prefetched = null;
     if (!res) return false;
     const env = this.env();
     const reply = res.reply && replyIsGrounded(res.reply, facts, text) ? res.reply : null;
@@ -270,6 +281,10 @@ export class Engine {
       return;
     }
 
+    // If the keywords can't read this, the model will be needed; start the conversation call now, in parallel.
+    this.prefetched = this.deps.converse && keywordParse(text, ask?.topic ?? null).confidence < 0.85
+      ? this.deps.converse(this.converseInput(trip, m, text))
+      : null;
     const parsed = await this.deps.understand(text, ask?.topic ?? null, this.historyOf(m.phone).slice(-5, -1));
 
     if (parsed.intent === "opt_out") {
@@ -500,7 +515,7 @@ export class Engine {
     if (trip.log.length > 200) trip.log.splice(0, trip.log.length - 200);
   }
 
-  private run(fn: () => Promise<void>): Promise<void> {
+  private run(fn: () => Promise<void>, sender?: Phone): Promise<void> {
     const next = this.lock.then(async () => {
       try {
         await fn();
@@ -511,41 +526,38 @@ export class Engine {
       this.deps.onChange?.();
       const out = this.outbox;
       this.outbox = [];
-      await this.flush(out);
+      await this.flush(out, sender);
     });
     this.lock = next.catch(() => undefined);
     return next;
   }
 
   /** Phrase and send. An ack followed by a question to the same person is merged into one text. */
-  private async flush(out: Outbound[]): Promise<void> {
-    const texts: { phone: Phone; text: string; isAck: boolean; intent: MessageIntent }[] = [];
-    // Phrase in parallel (each may be a Gemini call), with this person's recent chat for context.
-    const phrased = await Promise.all(out.map((o) => this.deps.phrase(o.intent, this.historyOf(o.phone).slice(-4))));
-    out.forEach((o, i) => texts.push({ phone: o.phone, text: phrased[i], isAck: o.intent.kind === "ack", intent: o.intent }));
+  private async flush(out: Outbound[], sender?: Phone): Promise<void> {
+    const groups = new Map<Phone, MessageIntent[]>();
+    for (const o of out) groups.set(o.phone, [...(groups.get(o.phone) ?? []), o.intent]);
 
-    const merged: { phone: Phone; text: string; intent: MessageIntent }[] = [];
-    for (let i = 0; i < texts.length; i++) {
-      const cur = texts[i];
-      const nextSame = texts.slice(i + 1).find((x) => x.phone === cur.phone);
-      if (cur.isAck && nextSame && cur.text.length + nextSame.text.length < 160) {
-        nextSame.text = clip(`${cur.text} ${nextSame.text}`);
-        continue;
+    // One person's texts go out in order, each phrased knowing what the previous one said (no double greetings).
+    const deliver = async (phone: Phone) => {
+      const context: Turn[] = this.historyOf(phone).slice(-4);
+      for (const intent of pairAcks(groups.get(phone)!)) {
+        const text = await this.deps.phrase(intent, context);
+        context.push({ from: "bot", text });
+        if (this.lastSent.get(phone) === text) continue; // never repeat ourselves word for word
+        try {
+          await this.deps.transport.send(phone, text);
+          this.lastSent.set(phone, text);
+          this.remember(phone, "bot", text);
+        } catch (err) {
+          console.error(`[engine] send failed: ${(err as Error).message}`);
+          if (intent.kind === "invited") await this.inviteFailed(phone, intent.name);
+        }
       }
-      merged.push({ phone: cur.phone, text: cur.text, intent: cur.intent });
-    }
-    for (const msg of merged) {
-      if (this.lastSent.get(msg.phone) === msg.text) continue; // never repeat ourselves word for word
-      try {
-        await this.deps.transport.send(msg.phone, msg.text);
-        this.lastSent.set(msg.phone, msg.text);
-        this.remember(msg.phone, "bot", msg.text);
-      } catch (err) {
-        console.error(`[engine] send failed: ${(err as Error).message}`);
-        if (msg.intent.kind === "invited") await this.inviteFailed(msg.phone, msg.intent.name);
-      }
-    }
-    if (merged.length) this.deps.store.save(); // keep the chat history we just added
+    };
+    // The person who just texted is waiting on us: their reply goes first. Everyone else follows, in parallel.
+    if (sender && groups.has(sender)) await deliver(sender);
+    await Promise.all([...groups.keys()].filter((p) => p !== sender).map(deliver));
+    if (groups.size) this.deps.store.save(); // keep the chat history we just added
   }
 
   /**
@@ -583,4 +595,18 @@ function answers(ask: Ask, p: ParsedReply): boolean {
     case "poll": return p.rsvp !== null || p.itemYes !== null;
     default: return false;
   }
+}
+
+/** "awesome!" + the next question become one text (and one model call), if they fit in a single message. */
+function pairAcks(intents: MessageIntent[]): MessageIntent[] {
+  const out: MessageIntent[] = [];
+  for (let i = 0; i < intents.length; i++) {
+    const cur = intents[i];
+    const next = intents[i + 1];
+    if (cur.kind === "ack" && next && template(cur).length + template(next).length < 158) {
+      out.push({ kind: "pair", first: cur, second: next });
+      i++;
+    } else out.push(cur);
+  }
+  return out;
 }
