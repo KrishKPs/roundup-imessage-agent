@@ -10,6 +10,7 @@ const run = promisify(execFile);
 
 export class UserRegistry {
   private known = new Set<string>();
+  private lines = new Map<string, string>(); // person -> the pool line they text the bot at
   private inFlight = new Map<string, Promise<void>>();
 
   constructor(private projectId: string) {}
@@ -25,9 +26,10 @@ export class UserRegistry {
   async load(): Promise<void> {
     try {
       const { stdout } = await this.cli(["ls"]);
-      const users = JSON.parse(stdout) as { phoneNumber?: string; email?: string }[];
+      const users = JSON.parse(stdout) as { phoneNumber?: string; email?: string; assignedPhoneNumber?: string }[];
       for (const u of users) {
         if (u.phoneNumber) this.known.add(u.phoneNumber);
+        if (u.phoneNumber && u.assignedPhoneNumber) this.lines.set(u.phoneNumber, u.assignedPhoneNumber);
         if (u.email) this.known.add(u.email.toLowerCase());
       }
       console.log(`[registry] ${this.known.size} users already registered on the project`);
@@ -47,13 +49,20 @@ export class UserRegistry {
     await p;
   }
 
+  /** The bot number this person should text (shared pool gives each person their own). */
+  lineFor(phone: Phone): string | undefined {
+    return this.lines.get(phone);
+  }
+
   private async add(phone: Phone): Promise<void> {
     const digits = phone.replace(/\D/g, "");
     try {
-      await this.cli([
+      const { stdout } = await this.cli([
         "add", "--phone", phone, "--first-name", "Roundup", "--last-name", `Guest ${digits.slice(-4)}`,
         "--email", `roundup.guest.${digits}@example.com`,
       ]);
+      const line = (JSON.parse(stdout) as { assignedPhoneNumber?: string }).assignedPhoneNumber;
+      if (line) this.lines.set(phone, line);
       console.log(`[registry] registered ${maskPhone(phone)}`);
     } catch (err) {
       const msg = shortErr(err);

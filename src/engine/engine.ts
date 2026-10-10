@@ -64,9 +64,18 @@ export class Engine {
       const trip = this.tripOf(phone);
       const m = trip?.members[phone];
       if (m?.optedOut) return; // stop is permanent: never reply again
+      const firstContact = !!m?.invited && !m.heardFrom;
       if (m) {
         m.sentSinceReply = 0;
         m.heardFrom = true;
+      }
+      if (trip && m && firstContact && !m.pendingAsk && (ACK_ONLY.test(body) || /^(hi|hey|hello|yo|sup|hii+)\b/i.test(body))) {
+        // Added by the organizer, and this is their first text (maybe our invite never arrived).
+        this.ctx.out(phone, { kind: "invited", name: m.name, trip: trip.title, organizer: organizerName(trip), date: trip.dateText });
+        if (!m.name) enqueueAsk(this.ctx, trip, m, "name");
+        else if (trip.status !== "collecting_members" && m.rsvp === "unknown") enqueueAsk(this.ctx, trip, m, "rsvp");
+        this.advance(trip);
+        return;
       }
 
       const env: CommandEnv = { ctx: this.ctx, state: this.state, resetState: () => this.deps.store.reset() };
@@ -396,10 +405,10 @@ export class Engine {
 
   /** Phrase and send. An ack followed by a question to the same person is merged into one text. */
   private async flush(out: Outbound[]): Promise<void> {
-    const texts: { phone: Phone; text: string; isAck: boolean }[] = [];
-    for (const o of out) texts.push({ phone: o.phone, text: await this.deps.phrase(o.intent), isAck: o.intent.kind === "ack" });
+    const texts: { phone: Phone; text: string; isAck: boolean; intent: MessageIntent }[] = [];
+    for (const o of out) texts.push({ phone: o.phone, text: await this.deps.phrase(o.intent), isAck: o.intent.kind === "ack", intent: o.intent });
 
-    const merged: { phone: Phone; text: string }[] = [];
+    const merged: { phone: Phone; text: string; intent: MessageIntent }[] = [];
     for (let i = 0; i < texts.length; i++) {
       const cur = texts[i];
       const nextSame = texts.slice(i + 1).find((x) => x.phone === cur.phone);
@@ -407,7 +416,7 @@ export class Engine {
         nextSame.text = clip(`${cur.text} ${nextSame.text}`);
         continue;
       }
-      merged.push({ phone: cur.phone, text: cur.text });
+      merged.push({ phone: cur.phone, text: cur.text, intent: cur.intent });
     }
     for (const msg of merged) {
       if (this.lastSent.get(msg.phone) === msg.text) continue; // never repeat ourselves word for word
@@ -416,7 +425,25 @@ export class Engine {
         this.lastSent.set(msg.phone, msg.text);
       } catch (err) {
         console.error(`[engine] send failed: ${(err as Error).message}`);
+        if (msg.intent.kind === "invited") await this.inviteFailed(msg.phone, msg.intent.name);
       }
+    }
+  }
+
+  /** We couldn't text an invitee first. Ask the organizer to have them text us (that always works). */
+  private async inviteFailed(phone: Phone, name: string): Promise<void> {
+    const trip = this.tripOf(phone);
+    if (!trip) return;
+    const line = this.deps.transport.lineFor?.(phone);
+    const who = name || "them";
+    const text = clip(line
+      ? `couldn't text ${who} directly yet. ask ${name ? "them" : "them"} to text "hi" to ${line} and i'll take it from there.`
+      : `couldn't text ${who} directly yet. ask them to text "hi" to me and i'll take it from there.`);
+    this.log(trip, "handoff", `couldn't reach ${name || "an invitee"}, asked ${organizerName(trip)} to have them text in`);
+    try {
+      await this.deps.transport.send(trip.organizer, text);
+    } catch (err) {
+      console.error(`[engine] could not tell organizer: ${(err as Error).message}`);
     }
   }
 }

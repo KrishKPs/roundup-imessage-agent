@@ -117,13 +117,17 @@ export class SpectrumTransport implements Transport {
         return;
       } catch (err) {
         const notAllowed = /target not allowed/i.test((err as Error).message);
-        if (!notAllowed || attempt >= 3) throw err;
+        if (!notAllowed || attempt >= 2) throw err; // one fresh-connection retry; more never helped
         console.log(`[spectrum] ${maskPhone(phone)} not reachable yet (attempt ${attempt}), refreshing lines`);
         if (this.reconnecting) await this.reconnecting;
         else await this.reconnect();
         await new Promise((r) => setTimeout(r, 1500 * attempt));
       }
     }
+  }
+
+  lineFor(phone: Phone): string | undefined {
+    return this.registry.lineFor(phone);
   }
 
   private async sendOnce(phone: Phone, text: string): Promise<void> {

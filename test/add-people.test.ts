@@ -79,3 +79,25 @@ describe("re-adding", () => {
     expect(h.transport.to(phoneFor(5))).toEqual([]);
   });
 });
+
+describe("invite can't be delivered", () => {
+  it("tells the organizer the truth and the invitee's bot number; texting first gets them a proper welcome", async () => {
+    const h = harness();
+    const org = phoneFor(0), khush = "+17045552194";
+    const realSend = h.transport.send.bind(h.transport);
+    h.transport.send = async (phone, text) => {
+      if (phone === khush && !blocked.done) throw new Error("[spectrum-imessage] Target not allowed for this project");
+      return realSend(phone, text);
+    };
+    const blocked = { done: false };
+    (h.transport as unknown as { lineFor: (p: string) => string }).lineFor = () => "+16282647648";
+    await h.say(org, "camping trip saturday");
+    await h.say(org, "Hasti");
+    await h.engine.handleContacts(org, [{ name: "Khush", phone: khush }]);
+    expect(h.transport.to(org).join(" ")).toMatch(/couldn't text Khush directly yet. ask them to text "hi" to \+16282647648/);
+
+    blocked.done = true; // inbound always works: Khush texts the bot first
+    await h.say(khush, "hi");
+    expect(h.transport.to(khush)[0]).toMatch(/hey Khush! Hasti added you to Camping trip/);
+  });
+});
