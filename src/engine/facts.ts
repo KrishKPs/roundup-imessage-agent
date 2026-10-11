@@ -7,13 +7,14 @@ import { assignSeats, budgetAnsweredCount, groupBudget } from "./plan.js";
 
 const names = (ms: Member[]) => ms.map((m) => m.name || "someone").join(", ") || "nobody";
 
-export function factsFor(trip: Trip, me: Member, _ctx: Ctx): string {
+export function factsFor(trip: Trip, me: Member, ctx: Ctx): string {
   const people = byJoin(trip).filter((m) => !m.optedOut);
   const isOrganizer = me.phone === trip.organizer;
   const lines = [
     `trip: ${trip.title}`,
     `date: ${trip.dateText ?? "not set yet"}`,
     `place: ${trip.place ?? "not set yet"}`,
+    `trip page (share this link when asked for the link/plan page): ${ctx.cfg.tripLink?.(trip.code) ?? "not available"}`,
     `organizer: ${nameOf(trip, trip.organizer)}`,
     `stage: ${trip.status === "collecting_members" ? "people are still joining; the rsvp/budget/ride questions go out when the organizer texts start (the organizer can ask everyone something anytime)" : trip.status === "coordinating" ? "sorting out who's in, rides, and what to bring" : "plans have been sent"}`,
     `going: ${names(people.filter((m) => m.rsvp === "yes"))}`,

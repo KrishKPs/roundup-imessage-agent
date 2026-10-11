@@ -3,8 +3,9 @@
 // and the organizer gets one summary once everyone asked has answered. Several questions can be open at once.
 import type { Ask, Member, Phone, Poll, Trip } from "../types.js";
 import { newId } from "../util.js";
+import { keywordParse } from "../llm/understand.js";
 import { enqueueAsk } from "./asks.js";
-import { type Ctx, organizerName } from "./context.js";
+import { type Ctx, isGoing, organizerName } from "./context.js";
 
 const EVERYONE = /^(everyone|everybody|the group|all|people|the crew|y'?all|them all|the gang)\b/i;
 
@@ -181,6 +182,7 @@ export function recordPollAnswer(ctx: Ctx, trip: Trip, m: Member, ask: Ask, answ
   if (!poll || poll.reported) return;
   poll.answers[m.phone] = answer.trim().slice(0, 200);
   ctx.log(trip, "answered", `${m.name} answered ${organizerName(trip)}'s question`);
+  syncAttendance(ctx, trip);
   reportPollIfDone(ctx, trip, poll);
 }
 
@@ -243,4 +245,30 @@ export function announce(ctx: Ctx, trip: Trip, message: string, target: Target =
 /** "to bring the speaker" -> "bring the speaker"; "know that we're leaving at 9" -> "we're leaving at 9". */
 export function cleanNote(raw: string): string {
   return youify(raw.trim().replace(/^(?:know\s+)?(?:that\s+|to\s+)?/i, "").replace(/\s+/g, " ")).slice(0, 200);
+}
+
+// ---------------------------------------------------------------- "are you coming?" asked by the organizer
+
+/** The organizer asking whether people are coming ("are you coming to CAMP on sunday?", "you in for saturday?"). */
+export function isAttendanceQuestion(q: string): boolean {
+  return /\b(coming|be there|make it|joining|you in\b|you down\b|down for|in for|going to (the )?(trip|camp|party|beach))/i.test(q);
+}
+
+/**
+ * Answers to an attendance question count as RSVPs ("Yess" -> going), for anyone who hasn't RSVP'd yet.
+ * Runs when an answer comes in and on every tick, so older answers are picked up too. Idempotent.
+ */
+export function syncAttendance(ctx: Ctx, trip: Trip): void {
+  for (const poll of polls(trip)) {
+    if (!isAttendanceQuestion(poll.question)) continue;
+    for (const [phone, answer] of Object.entries(poll.answers)) {
+      const m = trip.members[phone];
+      if (!m || m.optedOut || m.rsvp !== "unknown") continue;
+      const rsvp = keywordParse(answer, "rsvp").rsvp;
+      if (!rsvp) continue;
+      m.rsvp = rsvp;
+      ctx.log(trip, "answered", rsvp === "yes" ? `${m.name} is in` : rsvp === "maybe" ? `${m.name} is a maybe` : `${m.name} can't make it`);
+      if (trip.status !== "collecting_members" && isGoing(m) && m.budgetCap === null) enqueueAsk(ctx, trip, m, "budget");
+    }
+  }
 }

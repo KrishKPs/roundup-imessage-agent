@@ -50,7 +50,7 @@ describe("itinerary", () => {
     expect(transport.to(org).at(-1)).toBe(`sent to all 2 people! the trip page: https://roundup.test/t/${code}`);
     const page = tripPage(trip);
     expect(page.itinerary).toContain("Jordan Lake");
-    expect(JSON.stringify(page)).not.toMatch(/55|\+1919/); // no individual budgets, no phone numbers
+    expect(JSON.stringify({ ...page, updatedAt: null })).not.toMatch(/\b55\b|\+1919/); // no individual budgets, no phone numbers
   });
 
   it("the organizer edits by text, and a re-send only tells people the plan changed", async () => {

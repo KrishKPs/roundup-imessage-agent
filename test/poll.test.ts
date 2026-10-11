@@ -127,4 +127,14 @@ describe("organizer asks everyone", () => {
     await h.say(org, "tell everyone they need to bring their own water");
     expect(h.transport.to(maya)).toEqual(["from Krish: you need to bring your own water"]);
   });
+
+  it("answers to 'are you coming?' count as RSVPs, so the trip page shows who's going", async () => {
+    const { h, org, sam, maya, leo } = await campTrip();
+    await h.say(org, "ask everyone are you coming to CAMP on sunday");
+    await h.say(sam, "Yess");
+    await h.say(maya, "No");
+    await h.say(leo, "Yes I will be there");
+    const t = h.trip();
+    expect([t.members[sam].rsvp, t.members[maya].rsvp, t.members[leo].rsvp]).toEqual(["yes", "no", "yes"]);
+  });
 });
