@@ -3,7 +3,7 @@ import type { Member, Phone, State, Trip } from "../types.js";
 import { newId, normalizePhone, parseName } from "../util.js";
 import { enqueueAsk } from "./asks.js";
 import { newNeed, releaseCommitments } from "./chain.js";
-import { type Ctx, goingMembers, organizerName, seatsNeed } from "./context.js";
+import { type Ctx, goingMembers, isGoing, organizerName, seatsNeed } from "./context.js";
 import { budgetAnsweredCount, finalize } from "./plan.js";
 import { announce, cleanNote, latestPoll, parseAnnouncement, parseDirected, pollSummary, startPoll, toYou } from "./poll.js";
 import { findJoinCode, organizerVerb, parsePeople, parseTripRequest, textAfterCode } from "./intents.js";
@@ -148,7 +148,11 @@ export function handleCommand(env: CommandEnv, phone: Phone, text: string): bool
     ctx.out(phone, { kind: "started_organizer", count: others.length });
     // The organizer is going by definition; ask them for a budget like everyone else.
     enqueueAsk(ctx, trip, trip.members[phone], "budget");
-    for (const m of others) enqueueAsk(ctx, trip, m, "rsvp");
+    for (const m of others) {
+      // People who joined are already in; only ask "you in?" of anyone we never heard a yes from.
+      if (m.rsvp === "unknown") enqueueAsk(ctx, trip, m, "rsvp");
+      else if (isGoing(m) && m.budgetCap === null) enqueueAsk(ctx, trip, m, "budget");
+    }
     return true;
   }
 
@@ -222,16 +226,27 @@ function joinTrip(env: CommandEnv, phone: Phone, code: string, givenName: string
 /** First contact: always says it's an AI (spec 10.5). Then asks RSVP if the trip is already moving. */
 export function welcome(ctx: Ctx, trip: Trip, m: Member): void {
   ctx.log(trip, "joined", `${m.name} joined`);
+  markIn(ctx, trip, m);
   const waiting = trip.status === "collecting_members";
   if (m.invited) {
     // They already got the AI intro with the invite; keep it to one short line.
-    const rest = waiting ? ` i'll text you once ${organizerName(trip)} kicks things off.` : "";
-    ctx.out(m.phone, { kind: "text", text: `nice to meet you ${m.name}!${rest}` });
+    const rest = waiting ? ` you're in for ${trip.title}. i'll text you once ${organizerName(trip)} kicks things off.` : "";
+    ctx.out(m.phone, { kind: "text", text: `nice to meet you ${m.name}.${rest}` });
   } else {
     ctx.out(m.phone, { kind: "intro", name: m.name, trip: trip.title, organizer: organizerName(trip) });
-    if (waiting) ctx.out(m.phone, { kind: "waiting_for_start", organizer: organizerName(trip) });
+    if (waiting) ctx.out(m.phone, { kind: "waiting_for_start", organizer: organizerName(trip), trip: trip.title });
   }
-  if (!waiting) enqueueAsk(ctx, trip, m, "rsvp");
+  if (!waiting && m.budgetCap === null) enqueueAsk(ctx, trip, m, "budget"); // already in: skip "you in?"
+}
+
+/**
+ * Texting the bot to join a trip means you're going (team decision, Oct 11): no separate "you in?" question.
+ * They can still say "maybe" or "i can't come anymore" later, which updates it.
+ */
+export function markIn(ctx: Ctx, trip: Trip, m: Member): void {
+  if (m.rsvp !== "unknown" || m.optedOut) return;
+  m.rsvp = "yes";
+  ctx.log(trip, "answered", `${m.name || "someone"} is in`);
 }
 
 export function optOut(ctx: Ctx, trip: Trip, m: Member): void {

@@ -34,7 +34,7 @@ export function harness(file: string | null = null) {
 }
 
 /**
- * Organizer (index 0) creates a trip and n-1 members join and RSVP yes with a budget.
+ * Organizer (index 0) creates a trip and n-1 members join (joining = in) and answer the budget question.
  * The organizer's budget is answered too. Returns phones in join order.
  */
 export async function tripWithMembers(h: ReturnType<typeof harness>, names: string[], budgets?: (number | null)[]) {
@@ -47,7 +47,7 @@ export async function tripWithMembers(h: ReturnType<typeof harness>, names: stri
   const b = budgets ?? names.map(() => null);
   await h.say(phones[0], b[0] === null ? "skip" : String(b[0]));
   for (let i = 1; i < names.length; i++) {
-    await h.say(phones[i], "yes");
+    // Joining by text already means "in": the first question after start is the budget.
     await h.say(phones[i], b[i] === null ? "skip" : String(b[i]));
   }
   return phones;

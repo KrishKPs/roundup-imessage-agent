@@ -14,8 +14,9 @@ describe("demo script", () => {
     await h.say(judge, "join BEACH7");
     expect(h.transport.to(judge)[0]).toMatch(/AI helping Priya plan Beach day/);
     await h.say(judge, "Alex");
-    expect(h.transport.to(judge).join(" ")).toMatch(/hey Alex,.*you in/);
-    await h.say(judge, "yes!");
+    // Texting in to join means you're in: no "you in?", straight to the private budget question.
+    expect(h.trip().members[judge].rsvp).toBe("yes");
+    expect(h.transport.to(judge).join(" ")).toMatch(/hey Alex,.*spend/);
     await h.say(judge, "30");
 
     await h.say(priya, "no sorry, can't drive");

@@ -454,6 +454,10 @@ fails. After generation, enforce in code: trim, cut to 160 characters, single me
    item needs. Organizer sends `start`.
 2. **RSVP and budget, in parallel**: on `start`, every member is asked RSVP at once.
    Each member who says yes is then asked for a private budget cap.
+   *Changed Oct 11, 2026 (team decision):* texting the bot to join (code, trip link, or
+   replying to an invite) counts as RSVP yes. Those members skip "you in?" and go straight
+   to the budget question. They can still say maybe or drop out later; a "no" to the
+   organizer's "are you coming?" question counts too.
 3. **Seats chain, sequential**: once at least half of members have answered RSVP, or
    `NUDGE_AFTER_SECONDS` has passed, open the seats need and run the chain.
 4. **Item chains**: each item need runs its own chain, one at a time, after seats.

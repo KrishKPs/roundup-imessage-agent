@@ -24,7 +24,7 @@ describe("organizer asks everyone", () => {
 
     await h.say(sam, "yes");
     await h.say(maya, "nah i can't make it that early");
-    expect(h.trip().members[maya].rsvp).toBe("unknown"); // "can't make it that early" is an answer, not leaving the trip
+    expect(h.trip().members[maya].rsvp).toBe("yes"); // joined = in; "can't make it that early" is an answer, not leaving
     expect(h.transport.to(sam).at(-1)).toBe("got it, i'll let Krish know");
     expect(h.transport.to(org)).toHaveLength(1); // no tally until everyone answers
 

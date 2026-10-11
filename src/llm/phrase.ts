@@ -62,7 +62,7 @@ export function template(i: MessageIntent): string {
     case "unknown_code": return "hmm, i don't know that code. can you double-check it with whoever invited you?";
     case "help": return "hey, i'm Roundup, an AI that plans group trips over text. planning something? tell me what and when, like \"camping trip saturday\". got a code? just send it.";
     case "already_member": return `you're already in ${i.trip}`;
-    case "waiting_for_start": return `you're all set. i'll text you once ${i.organizer} kicks things off.`;
+    case "waiting_for_start": return `you're in${i.trip ? ` for ${i.trip}` : ""}. i'll text you once ${i.organizer} kicks things off.`;
     case "started_organizer": return `we're rolling. i'm texting ${i.count === 1 ? "them" : i.count === 2 ? "both of them" : `all ${i.count} people`} now. text status anytime.`;
     case "needs_added": return `added: ${i.items.join(", ")}. i'll find people to bring them.`;
     case "not_organizer": return `only ${i.organizer} can do that one.`;

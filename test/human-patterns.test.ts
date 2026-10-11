@@ -35,6 +35,7 @@ describe("from the reference conversations", () => {
     const code = h.trip().code;
     const kai = "+19195551001";
     await h.say(kai, `join ${code} Kai`);
+    h.trip().members[kai].rsvp = "unknown"; // someone we never got a yes from (joining now counts as in)
     await h.say(org, "start");
     await h.say(kai, "yeah as long as were back by 8");
     expect(h.trip().members[kai].rsvp).toBe("yes");
@@ -47,5 +48,18 @@ describe("from the reference conversations", () => {
     expect(rsvpCondition("fine but im not waking up before 9")).toBe("but im not waking up before 9");
     expect(rsvpCondition("yeah i can")).toBeNull();
     expect(rsvpCondition("yes but only if it's under $20")).toBeNull();
+  });
+
+  it("texting in to join means you're in; nobody who joined gets 'you in?'", async () => {
+    const h = harness();
+    const org = "+19195551000", kai = "+19195551001";
+    await h.say(org, "new trip Lake day on saturday");
+    await h.say(org, "Priya");
+    await h.say(kai, `join ${h.trip().code} Kai`);
+    expect(h.trip().members[kai].rsvp).toBe("yes");
+    expect(h.transport.to(kai).at(-1)).toBe("you're in for Lake day. i'll text you once Priya kicks things off.");
+    await h.say(org, "start");
+    expect(h.transport.to(kai).join(" ")).not.toMatch(/you in for|you coming/);
+    expect(h.transport.to(kai).at(-1)).toMatch(/spend/);
   });
 });

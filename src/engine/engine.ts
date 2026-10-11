@@ -18,7 +18,7 @@ import { template } from "../llm/phrase.js";
 import { askIntent, enqueueAsk, itemLabel, resolvePending, sendNextQueued } from "./asks.js";
 import { applyChainAnswer, newNeed, recomputeSeats, releaseCommitments, runChain } from "./chain.js";
 import {
-  type CommandEnv, type WebPerson, addPeople, newMember, setDate, createTrip, createWebTrip, greetWebSignup, handleCommand, joinWebTrip, optOut,
+  type CommandEnv, type WebPerson, addPeople, markIn, newMember, setDate, createTrip, createWebTrip, greetWebSignup, handleCommand, joinWebTrip, optOut,
   sendTripCreated, welcome,
 } from "./commands.js";
 import { type Ctx, type EngineConfig, isGoing, organizerName, seatsNeed } from "./context.js";
@@ -102,7 +102,10 @@ export class Engine {
         // Added by the organizer, and this is their first text (maybe our invite never arrived).
         this.ctx.out(phone, { kind: "invited", name: m.name, trip: trip.title, organizer: organizerName(trip), date: trip.dateText });
         if (!m.name) enqueueAsk(this.ctx, trip, m, "name");
-        else if (trip.status !== "collecting_members" && m.rsvp === "unknown") enqueueAsk(this.ctx, trip, m, "rsvp");
+        else {
+          markIn(this.ctx, trip, m); // they texted us back: they're in
+          if (trip.status !== "collecting_members" && m.budgetCap === null) enqueueAsk(this.ctx, trip, m, "budget");
+        }
         this.advance(trip);
         return;
       }

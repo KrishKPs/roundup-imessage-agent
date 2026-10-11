@@ -20,12 +20,14 @@ describe("website trip creation and trip link", () => {
     await h.say(sam, `hi! i'm Sam, joining Beach day (${code})`);
     expect(h.transport.to(sam).join(" ")).toMatch(/hey Sam, i'm Roundup, an AI helping Krish plan Beach day.*stop/);
 
-    // Maya hasn't texted yet: start skips her, and she gets the RSVP question once she does.
+    // Sam texted in, so he's in: start goes straight to his budget. Maya hasn't texted yet: start skips her.
+    expect(h.trip().members[sam].rsvp).toBe("yes");
     await h.say(org, "start");
-    expect(h.transport.to(sam).at(-1)).toMatch(/you in for Beach day/);
+    expect(h.transport.to(sam).at(-1)).toMatch(/spend/);
     expect(h.transport.to(maya)).toHaveLength(0);
     await h.say(maya, `hi! i'm Maya, joining Beach day (${code})`);
-    expect(h.transport.to(maya).join(" ")).toMatch(/AI helping Krish.*you in for Beach day/s);
+    expect(h.trip().members[maya].rsvp).toBe("yes");
+    expect(h.transport.to(maya).join(" ")).toMatch(/AI helping Krish.*spend/s);
   });
 
   it("unknown codes and opted-out numbers can't join; double sign-up is harmless", async () => {

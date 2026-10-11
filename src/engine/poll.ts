@@ -5,6 +5,7 @@ import type { Ask, Member, Phone, Poll, Trip } from "../types.js";
 import { newId } from "../util.js";
 import { keywordParse } from "../llm/understand.js";
 import { enqueueAsk } from "./asks.js";
+import { releaseCommitments } from "./chain.js";
 import { type Ctx, isGoing, organizerName } from "./context.js";
 
 const EVERYONE = /^(everyone|everybody|the group|all|people|the crew|y'?all|them all|the gang)\b/i;
@@ -263,9 +264,14 @@ export function syncAttendance(ctx: Ctx, trip: Trip): void {
     if (!isAttendanceQuestion(poll.question)) continue;
     for (const [phone, answer] of Object.entries(poll.answers)) {
       const m = trip.members[phone];
-      if (!m || m.optedOut || m.rsvp !== "unknown") continue;
+      if (!m || m.optedOut) continue;
       const rsvp = keywordParse(answer, "rsvp").rsvp;
-      if (!rsvp) continue;
+      // Fill in an unknown RSVP; and a "no" counts even if they joined (people change their minds). Never re-apply.
+      if (!rsvp || rsvp === m.rsvp || (m.rsvp !== "unknown" && rsvp !== "no")) continue;
+      if (rsvp === "no" && isGoing(m)) {
+        m.droppedOut = true;
+        releaseCommitments(ctx, trip, m); // frees their seats or item so the chains find someone else
+      }
       m.rsvp = rsvp;
       ctx.log(trip, "answered", rsvp === "yes" ? `${m.name} is in` : rsvp === "maybe" ? `${m.name} is a maybe` : `${m.name} can't make it`);
       if (trip.status !== "collecting_members" && isGoing(m) && m.budgetCap === null) enqueueAsk(ctx, trip, m, "budget");

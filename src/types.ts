@@ -152,7 +152,7 @@ export type MessageIntent =
   | { kind: "unknown_code" }
   | { kind: "help" }
   | { kind: "already_member"; trip: string }
-  | { kind: "waiting_for_start"; organizer: string }
+  | { kind: "waiting_for_start"; organizer: string; trip?: string }
   | { kind: "started_organizer"; count: number }
   | { kind: "needs_added"; items: string[] }
   | { kind: "not_organizer"; organizer: string }
