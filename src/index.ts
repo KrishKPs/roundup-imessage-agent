@@ -16,7 +16,7 @@ import type { Transport } from "./transport/transport.js";
 import { startTunnel } from "./tunnel.js";
 
 const cfg = loadConfig();
-const store = new Store("data/state.json");
+const store = new Store(process.env.STATE_FILE || "data/state.json"); // /data/state.json on Fly (a persistent disk)
 const understandLlm = pickLlm(cfg, 5000);
 const phraseLlm = pickLlm(cfg, 2500); // shorter: replies must land in < 4 s
 console.log(`[llm] model: ${llmName(cfg)}`);

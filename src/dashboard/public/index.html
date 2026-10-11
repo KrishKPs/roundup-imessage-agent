@@ -405,10 +405,15 @@ setInterval(() => view && drawTicker(view), 5000); // keep the "12s ago" fresh
 
 // ---------------------------------------------------------------- demo bar (this laptop, DEMO_MODE only)
 const demo = document.getElementById("demo");
-fetch("/api/demo/ping", { method: "POST" }).then((r) => { if (r.ok) demo.classList.add("on"); }).catch(() => {});
+// On the hosted bot, the demo bar needs the admin key: open the board once with ?key=..., it's remembered here.
+const keyParam = new URLSearchParams(location.search).get("key");
+try { if (keyParam) localStorage.setItem("roundup.adminKey", keyParam); } catch {}
+let adminKey = ""; try { adminKey = localStorage.getItem("roundup.adminKey") || ""; } catch {}
+const adminHeaders = adminKey ? { "x-admin-key": adminKey } : {};
+fetch("/api/demo/ping", { method: "POST", headers: adminHeaders }).then((r) => { if (r.ok) demo.classList.add("on"); }).catch(() => {});
 async function act(a) {
   if (a === "reset" && !confirm("Reset everything for the next judge?")) return;
-  const r = await fetch("/api/demo/" + a, { method: "POST" }).catch(() => null);
+  const r = await fetch("/api/demo/" + a, { method: "POST", headers: adminHeaders }).catch(() => null);
   if (r && !r.ok) console.warn("demo action failed", a, await r.text());
 }
 demo.addEventListener("click", (e) => { const a = e.target.dataset.a; if (a) act(a); });

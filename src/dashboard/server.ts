@@ -28,8 +28,16 @@ export interface DashboardOptions {
   };
 }
 
-/** Requests that came in through the public tunnel (cloudflared adds this header). */
-const viaTunnel = (req: Request) => !!req.get("cf-connecting-ip");
+/**
+ * Demo controls (seed/reset/crowd) are for the presenter only: allowed from this machine itself, or with the
+ * ADMIN_KEY header when the bot runs on a server. Anything through the public tunnel or a cloud proxy is "remote".
+ */
+const ADMIN_KEY = process.env.ADMIN_KEY || "";
+const isLoopback = (ip: string | undefined) => !!ip && /^(127\.|::1$|::ffff:127\.)/.test(ip);
+const viaTunnel = (req: Request) => {
+  if (ADMIN_KEY && req.get("x-admin-key") === ADMIN_KEY) return false;
+  return !!req.get("cf-connecting-ip") || !!req.get("fly-client-ip") || !isLoopback(req.socket.remoteAddress);
+};
 
 const clean = (v: unknown, max: number) => String(v ?? "").replace(/\s+/g, " ").trim().slice(0, max);
 
@@ -176,7 +184,8 @@ export function startDashboard(opts: DashboardOptions) {
     }
   });
 
-  const server = app.listen(opts.port, "127.0.0.1", () => {
+  const host = process.env.HOST || "127.0.0.1"; // 0.0.0.0 on a server (Fly), this laptop only otherwise
+  const server = app.listen(opts.port, host, () => {
     console.log(`[dashboard] trip board at http://localhost:${opts.port}`);
   });
 
