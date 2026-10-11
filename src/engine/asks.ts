@@ -1,17 +1,30 @@
 // One question at a time per member (spec 9.2). New questions wait in askQueue until the open one resolves.
-import type { Ask, AskTopic, Member, MessageIntent, Trip } from "../types.js";
+import type { Ask, AskTopic, InterviewStep, Member, MessageIntent, Trip } from "../types.js";
 import { newId } from "../util.js";
 import { type Ctx, isGoing, organizerName } from "./context.js";
 import { findPoll } from "./poll.js";
+import { constraintQuestion, interestQuestion, interviewQuestion, maybeAskPrefs } from "./prefs.js";
+
+/** Planning extras (plan.md A/B). They never block or delay the rides/items chains. */
+const OPTIONAL = new Set(["interest", "constraint", "interview"]);
 
 /** A member who got 2 questions/nudges with no reply is not sent more until they reply. */
 export const MAX_UNANSWERED = 2;
 
-export function enqueueAsk(ctx: Ctx, trip: Trip, m: Member, topic: AskTopic, needId: string | null = null, pollId?: string): void {
+export function enqueueAsk(ctx: Ctx, trip: Trip, m: Member, topic: AskTopic, needId: string | null = null, pollId?: string, step?: InterviewStep): void {
   if (m.optedOut) return;
   if (topic === "budget" && trip.settings?.budget === false) return; // organizer turned budgets off
-  const ask: Ask = { id: newId("ask"), topic, needId, askedAt: 0, nudged: false, ...(pollId ? { pollId } : {}) };
-  m.askQueue.push(ask);
+  const ask: Ask = { id: newId("ask"), topic, needId, askedAt: 0, nudged: false, ...(pollId ? { pollId } : {}), ...(step ? { step } : {}) };
+  const core = !OPTIONAL.has(topic);
+  if (core && OPTIONAL.has(m.pendingAsk?.topic ?? "")) {
+    // Core questions (budget, rides, items...) come first: an optional planning question steps aside, asked again after.
+    m.askQueue.unshift({ ...m.pendingAsk!, askedAt: 0, nudged: false });
+    m.pendingAsk = null;
+    m.askQueue.unshift(ask);
+  } else if (core) {
+    const at = m.askQueue.findIndex((a) => OPTIONAL.has(a.topic));
+    if (at === -1) m.askQueue.push(ask); else m.askQueue.splice(at, 0, ask); // ahead of queued optional questions
+  } else m.askQueue.push(ask);
   sendNextQueued(ctx, trip, m);
 }
 
@@ -24,6 +37,8 @@ export function resolvePending(ctx: Ctx, trip: Trip, m: Member): void {
 
 export function sendNextQueued(ctx: Ctx, trip: Trip, m: Member): void {
   if (m.pendingAsk || m.optedOut) return;
+  // Once their other questions are done, a member who's in gets the two preference questions (once).
+  if (!m.askQueue.length && !m.prefsAsked) maybeAskPrefs(ctx, trip, m);
   while (m.askQueue.length > 0) {
     const next = m.askQueue[0];
     if (!stillRelevant(trip, m, next)) {
@@ -51,6 +66,9 @@ export function cancelAsksFor(ctx: Ctx, trip: Trip, m: Member, needId: string): 
 function stillRelevant(trip: Trip, m: Member, ask: Ask): boolean {
   if (ask.topic === "rsvp") return m.rsvp === "unknown";
   if (ask.topic === "budget") return isGoing(m) && m.budgetCap === null;
+  if (ask.topic === "interview") return !trip.prefs?.interviewDone;
+  if (ask.topic === "interest") return !m.prefs?.interests;
+  if (ask.topic === "constraint") return !m.prefs?.constraints;
   if (ask.topic === "poll") {
     const poll = findPoll(trip, ask.pollId);
     return !!poll && !poll.reported && !(m.phone in poll.answers);
@@ -77,6 +95,9 @@ export function askIntent(trip: Trip, m: Member, ask: Ask): MessageIntent {
       return { kind: "ask_drive", name: m.name, trip: trip.title };
     case "seats": return { kind: "ask_seats", name: m.name };
     case "item": return { kind: "ask_item", name: m.name, item: need?.label ?? "something", trip: trip.title };
+    case "interview": return { kind: "text", text: interviewQuestion(trip, ask.step ?? "where") };
+    case "interest": return { kind: "text", text: interestQuestion(m) };
+    case "constraint": return { kind: "text", text: constraintQuestion(m) };
     case "poll": return { kind: "ask_poll", organizer: organizerName(trip), question: findPoll(trip, ask.pollId)?.question ?? "does the plan work for you?", open: true };
   }
 }

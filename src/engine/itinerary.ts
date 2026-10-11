@@ -6,6 +6,7 @@ import { clip } from "../util.js";
 import { type Ctx, goingMembers, nameOf, organizerName } from "./context.js";
 import { assignSeats, groupBudget, planFor } from "./plan.js";
 import { pollResults, polls } from "./poll.js";
+import { prefCounts } from "./prefs.js";
 
 /** "make the itinerary", "draft a plan for the day", "itinerary" */
 export function isMakeItinerary(t: string): boolean {
@@ -55,7 +56,16 @@ export function itineraryFacts(trip: Trip): string {
     const { answers } = pollResults(trip, poll);
     if (answers.length) lines.push(`asked "${poll.question}": ${answers.map((a) => `${a.name}: ${a.answer}`).join("; ")}`);
   }
-  for (const n of (trip.notes ?? []).slice(-6)) lines.push(`heads-up from ${n.name}: ${n.note}`);
+  // Heads-ups and constraints are private: the writer sees counts only, never who said what.
+  const p = trip.prefs ?? {}, c = prefCounts(trip);
+  if (p.vibe) lines.push(`vibe: ${p.vibe}`);
+  if (p.pace) lines.push(`pace: ${p.pace === "relaxed" ? "relaxed (leave at least one free-time slot)" : "packed"}`);
+  if (p.mustDo?.length) lines.push(`must-dos: ${p.mustDo.join(", ")}`);
+  if (p.avoid?.length) lines.push(`avoid: ${p.avoid.join(", ")}`);
+  if (c.interests) lines.push(`what people are into (counts): ${c.interests}`);
+  if (c.constraints) lines.push(`plan around (counts, never name anyone): ${c.constraints}`);
+  const heads = (trip.notes ?? []).length;
+  if (heads) lines.push(`${heads} private heads-up(s) went to the organizer`);
   return lines.join("\n");
 }
 
@@ -78,7 +88,7 @@ export function templateItinerary(trip: Trip): string {
 
 /** What the organizer sees for a new or edited draft. */
 export function draftMessage(text: string, edited: boolean): string {
-  return `${edited ? "updated" : "here's a first draft"}:\n\n${text}\n\n${edited ? "anything else?" : "want changes? just tell me, like \"push it an hour later\"."} text "send it" when it looks good.`;
+  return `${edited ? "updated draft" : "draft's ready"}:\n\n${text}\n\nlook good? say yes or tell me what to change (like "push it an hour later")`;
 }
 
 /**
@@ -89,26 +99,51 @@ export function sendItinerary(ctx: Ctx, trip: Trip, link: string | null): void {
   const it = trip.itinerary;
   if (!it) return;
   const again = it.sentAt !== null;
+  const summary = again ? changeSummary(it.sentText ?? "", it.text) : "first version sent";
+  if (again && !summary) {
+    ctx.out(trip.organizer, { kind: "text", text: "nothing changed since the last version, so i didn't text anyone." });
+    return;
+  }
   it.sentAt = ctx.now();
   it.version = (it.version ?? 0) + 1;
-  (it.changes ??= []).push({ version: it.version, at: ctx.now(), summary: again ? "plan updated by the organizer" : "first version sent" }); // the trip's stage doesn't change: rides etc. can still get sorted, and plans update then
+  it.sentText = it.text;
+  (it.changes ??= []).push({ version: it.version, at: ctx.now(), summary: summary! });
   const seats = assignSeats(trip);
   const budget = groupBudget(trip);
   const reach = goingMembers(trip).filter((m) => m.phone !== trip.organizer && !m.optedOut && !((m.viaLink || m.invited) && !m.heardFrom));
-  const page = link ? ` full plan: ${link}` : "";
+  const page = link ? ` updated plan: ${link}` : "";
+  let told = 0;
   for (const m of reach) {
+    const [first, second] = planFor(trip, m.phone, seats, budget);
+    const mine = [first, second].filter(Boolean).join("\n");
     if (again) {
-      ctx.out(m.phone, { kind: "text", text: `heads up, ${organizerName(trip)} updated the plan for ${trip.title}.${page}` });
+      // plan.md H: only people whose own details changed get a text; everyone else sees it on the page.
+      const timeMoved = /\b(time|moved|earlier|later|\d)/.test(summary!);
+      if (mine === m.lastPlan && !timeMoved) continue;
+      ctx.out(m.phone, { kind: "text", text: clip(`small change: ${summary}.${page}`) });
+      m.lastPlan = mine;
+      told += 1;
       continue;
     }
-    const [first, second] = planFor(trip, m.phone, seats, budget);
     ctx.out(m.phone, { kind: "text", text: first });
-    ctx.out(m.phone, { kind: "text", text: `${second ? `${second} ` : ""}${page.trim()}`.trim() || clip(first) });
-    m.lastPlan = [first, second].filter(Boolean).join("\n");
+    ctx.out(m.phone, { kind: "text", text: `${second ? `${second} ` : ""}${link ? `plan's ready: ${link}` : ""}`.trim() || clip(first) });
+    m.lastPlan = mine;
+    told += 1;
   }
-  const who = reach.length === 1 ? reach[0].name : `all ${reach.length} people`;
-  ctx.out(trip.organizer, { kind: "text", text: reach.length ? `sent to ${who}!${link ? ` the trip page: ${link}` : ""}` : "nobody to send it to yet." });
-  ctx.log(trip, "finalized", again ? "itinerary updated and re-sent" : `itinerary sent to ${reach.length} people`);
+  const who = told === 1 ? "1 person" : `${told} people`;
+  ctx.out(trip.organizer, { kind: "text", text: again ? `v${it.version} is out: ${summary}. told ${who} whose plan changed.${link ? ` ${link}` : ""}` : reach.length ? `sent to ${who}!${link ? ` the trip page: ${link}` : ""}` : "nobody to send it to yet." });
+  ctx.log(trip, "finalized", again ? `plan v${it.version}: ${summary}` : `itinerary sent to ${reach.length} people`);
+}
+
+/** One line on what changed between two itinerary texts ("lunch at the picnic area moved to 1:00"). */
+export function changeSummary(before: string, after: string): string | null {
+  const a = before.split("\n").slice(1).map((l) => l.trim()), b = after.split("\n").slice(1).map((l) => l.trim());
+  const added = b.filter((l) => !a.includes(l)), removed = a.filter((l) => !b.includes(l));
+  if (before.split("\n")[0] !== after.split("\n")[0]) return `now ${after.split("\n")[0].split(" · ").slice(1).join(", ")}`;
+  if (!added.length && !removed.length) return null;
+  const clean = (l: string) => l.replace(/^[^\p{L}\p{N}]+/u, "").trim();
+  if (added.length) return `${clean(added[0])}${added.length > 1 ? ` (+${added.length - 1} more)` : ""}`;
+  return `removed: ${clean(removed[0])}`;
 }
 
 /** One timeline item, parsed from an itinerary line ("12:00 meet at Jordan Lake", "🔥 Sunset: bonfire"). */

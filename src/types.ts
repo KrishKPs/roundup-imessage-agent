@@ -22,8 +22,30 @@ export interface Trip {
   awaitingPlace?: boolean; // addition: we asked the organizer where they're headed
   counters?: { texts: number; questions: number };
   pendingJoins?: Phone[];
-  facts?: TripFacts; // addition: details the organizer gave (create page); the bot answers from these, never invents
+  facts?: TripFacts;
+  prefs?: TripPrefs; // addition: organizer interview answers // addition: details the organizer gave (create page); the bot answers from these, never invents
   settings?: TripSettings; // addition: what Roundup sorts out (old trips: missing = everything on) // addition: people who just joined, announced together on the next tick // addition: private DMs in+out, questions asked (dashboard stats)
+}
+
+export type InterviewStep = "where" | "times" | "vibe" | "mustDo" | "avoid" | "pace";
+
+/** What the organizer told us in the setup interview (plan.md A). */
+export interface TripPrefs {
+  vibe?: string; // chill / active / food-focused, or their words
+  mustDo?: string[];
+  avoid?: string[];
+  pace?: "packed" | "relaxed";
+  interviewStarted?: boolean;
+  introSent?: boolean;
+  interviewDone?: boolean;
+}
+
+/** A member's answers to the two preference questions (plan.md B). Constraints are PRIVATE, like budgets. */
+export interface MemberPrefs {
+  interests?: string[]; // fixed tags: food, swimming, hiking, views, ...
+  interestNote?: string;
+  constraints?: string[]; // dietary / mobility / timing (or [] for none). Only ever counted, never shown with a name.
+  constraintNote?: string;
 }
 
 /** Organizer-given trip details. Empty string / missing = unknown: the bot says it'll check with the organizer. */
@@ -45,6 +67,7 @@ export interface Itinerary {
   text: string; // one line per step, plain text
   updatedAt: number;
   sentAt: number | null; // null while it's still a draft only the organizer has seen
+  sentText?: string; // what was last sent, to describe the next change
   version?: number; // 1 on first send, +1 on every later send (shown on the page and PDF)
   changes?: { version: number; at: number; summary: string }[]; // plain-language change log
 }
@@ -81,6 +104,8 @@ export interface Member {
   invited?: boolean; // added by the organizer (contact card or number) rather than joining by code
   heardFrom?: boolean; // they have texted us at least once
   viaLink?: boolean; // signed up on the website (trip link); we greet them when they first text in
+  prefs?: MemberPrefs; // addition: what they're into + what to plan around (private)
+  prefsAsked?: boolean; // the two preference questions were queued (asked at most once)
   vid?: string; // public id for the dashboard ("m_x7k2q9"). Random, never derived from the phone.
   sim?: boolean; // a simulated crowd member (Dashboard.md section 10): always labeled, never texted
   simDrives?: boolean; // the simulated persona has a car (used only for demo chain ordering)
@@ -105,13 +130,14 @@ export interface Need {
   shortNotified: number | null; // shortfall we last told the organizer about, to avoid repeats
 }
 
-export type AskTopic = "name" | "rsvp" | "budget" | "drive" | "seats" | "item" | "poll";
+export type AskTopic = "name" | "rsvp" | "budget" | "drive" | "seats" | "item" | "poll" | "interview" | "interest" | "constraint";
 
 export interface Ask {
   id: string;
   topic: AskTopic; // "name" and "seats" are additions: name capture and the "how many seats?" follow-up
   needId: string | null;
   pollId?: string; // topic "poll": which organizer question this is
+  step?: InterviewStep; // topic "interview": which setup question
   askedAt: number; // 0 while still queued
   nudged: boolean;
 }

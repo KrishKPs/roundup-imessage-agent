@@ -5,6 +5,7 @@ import { enqueueAsk } from "./asks.js";
 import { newNeed, releaseCommitments } from "./chain.js";
 import { type Ctx, goingMembers, isGoing, organizerName, seatsNeed } from "./context.js";
 import { budgetAnsweredCount, finalize } from "./plan.js";
+import { startInterview } from "./prefs.js";
 import { announce, cleanNote, latestPoll, parseAnnouncement, parseDirected, pollSummary, startPoll, toYou } from "./poll.js";
 import { findJoinCode, organizerVerb, parsePeople, parseTripRequest, textAfterCode } from "./intents.js";
 
@@ -200,6 +201,7 @@ export function sendTripCreated(ctx: Ctx, trip: Trip): void {
   ctx.out(org.phone, { kind: "trip_created", name: org.name, trip: trip.title, code: trip.code, joinByLink });
   if (joinByLink) ctx.out(org.phone, { kind: "invite_line", trip: trip.title, code: trip.code, organizer: org.name, agentNumber: ctx.cfg.agentNumber || null });
   ctx.log(trip, "joined", `${org.name} started ${trip.title}`);
+  startInterview(ctx, trip);
 }
 
 function joinTrip(env: CommandEnv, phone: Phone, code: string, givenName: string | null): void {
@@ -412,6 +414,7 @@ export function greetWebSignup(ctx: Ctx, trip: Trip, m: Member): void {
   if (m.phone === trip.organizer) {
     ctx.out(m.phone, { kind: "organizer_ready", name: m.name, trip: trip.title });
     ctx.log(trip, "joined", `${m.name} is connected`);
+    startInterview(ctx, trip); // quick setup questions, skipping anything the create page already answered
     return;
   }
   welcome(ctx, trip, m);

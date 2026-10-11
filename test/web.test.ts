@@ -15,7 +15,8 @@ describe("website trip creation and trip link", () => {
     expect(Object.keys(h.trip().members)).toEqual([org, sam, maya]);
 
     await h.say(org, "hi Roundup! i'm Krish, planning Beach day");
-    expect(h.transport.to(org)).toEqual([expect.stringMatching(/hey Krish, i'm Roundup, an AI planning Beach day.*start/)]);
+    expect(h.transport.to(org)[0]).toMatch(/hey Krish, i'm Roundup, an AI planning Beach day.*start/);
+    expect(h.transport.to(org)[1]).toMatch(/^quick setup so i can plan the day/); // plan.md A: setup interview starts
 
     await h.say(sam, `hi! i'm Sam, joining Beach day (${code})`);
     expect(h.transport.to(sam).join(" ")).toMatch(/hey Sam, i'm Roundup, an AI helping Krish plan Beach day.*stop/);

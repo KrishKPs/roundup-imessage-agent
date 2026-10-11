@@ -13,6 +13,9 @@ const TOPIC_QUESTION: Record<AskTopic, string> = {
   seats: "How many seats does your car have, including you?",
   item: "Can you bring the item we asked about?",
   poll: "Does the organizer's suggestion work for you? (yes / no / maybe)",
+  interview: "A trip setup question from the assistant.",
+  interest: "What are you most hoping to do on the trip?",
+  constraint: "Anything the planner should plan around (food needs, mobility, timing)?",
 };
 
 export function understandPrompt(text: string, topic: AskTopic | null, history: { from: "them" | "bot"; text: string }[] = []): string {

@@ -39,15 +39,15 @@ describe("itinerary", () => {
     expect(transport.to(org)).toEqual(["on it! where are you all headed?"]);
     await engine.handleInbound(org, "Jordan Lake");
     expect(trip.place).toBe("Jordan Lake");
-    expect(transport.to(org).at(-1)).toMatch(/^here's a first draft:\n\nBeach day · saturday 12pm · Jordan Lake\n/);
+    expect(transport.to(org).at(-1)).toMatch(/^draft's ready:\n\nBeach day · saturday 12pm · Jordan Lake\n/);
     expect(transport.to(org).at(-1)).toContain("budget: everyone's good up to $40");
     expect(transport.to(sam)).toHaveLength(0); // draft is the organizer's until they send it
     expect(tripPage(trip).itinerary).toBeNull();
 
     await engine.handleInbound(org, "looks good, send it");
-    expect(transport.to(sam).join(" ")).toContain(`full plan: https://roundup.test/t/${code}`);
+    expect(transport.to(sam).join(" ")).toContain(`plan's ready: https://roundup.test/t/${code}`);
     expect(transport.to(maya).join(" ")).toContain("here's your plan for Beach day");
-    expect(transport.to(org).at(-1)).toBe(`sent to all 2 people! the trip page: https://roundup.test/t/${code}`);
+    expect(transport.to(org).at(-1)).toBe(`sent to 2 people! the trip page: https://roundup.test/t/${code}`);
     const page = tripPage(trip);
     expect(page.itinerary).toContain("Jordan Lake");
     expect(JSON.stringify({ ...page, updatedAt: null })).not.toMatch(/\b55\b|\+1919/); // no individual budgets, no phone numbers
@@ -67,9 +67,9 @@ describe("itinerary", () => {
     // An edit through the conversation layer would call makeItinerary(trip, change); exercise it via the place change:
     await engine.handleInbound(org, "place: Jordan Lake north beach");
     expect(calls).toBe(2);
-    expect(transport.to(org).at(-1)).toMatch(/^updated:\n\n/);
+    expect(transport.to(org).at(-1)).toMatch(/^updated draft:\n\n/);
     await engine.handleInbound(org, "send it");
-    expect(transport.to(sam).at(-1)).toMatch(/^heads up, Krish updated the plan for Beach day\. full plan: /);
+    expect(transport.to(sam).at(-1)).toMatch(/^small change: now saturday 1pm, Jordan Lake\. updated plan: /);
     expect(trip.itinerary?.text).toContain("1:00");
     expect(trip.dateText).toBe("saturday 1pm"); // the edit moved the time, so the trip moved with it
   });
@@ -79,7 +79,8 @@ describe("itinerary", () => {
     trip.notes = [{ name: "Maya", note: "allergic to peanuts", at: 1 }];
     const facts = itineraryFacts(trip);
     expect(facts).toContain("group budget: everyone's comfortable up to $40");
-    expect(facts).toContain("heads-up from Maya: allergic to peanuts");
+    expect(facts).not.toContain("allergic to peanuts"); // heads-ups are private: the writer only learns that some exist
+    expect(facts).toContain("1 private heads-up(s) went to the organizer");
     expect(facts).not.toContain("55");
   });
 

@@ -99,6 +99,9 @@ export function replyFor(persona: Persona, topic: AskTopic, bank: Bank, rand: ()
     case "item": return persona.hasItems ? pick("item:yes", "yes") : pick("item:no", "no");
     case "name": return null;
     case "poll": return pick(`rsvp:${persona.rsvp}`, "works for me");
+    case "interview": return null;
+    case "interest": return ["swimming and food", "honestly just chilling", "views and photos", "idc", "games on the beach"][Math.floor(rand() * 5)];
+    case "constraint": return ["nah", "nope all good", "im vegetarian", "need to leave by 6"][Math.floor(rand() * 4)];
   }
 }
 

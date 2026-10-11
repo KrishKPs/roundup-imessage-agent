@@ -17,6 +17,9 @@ const SIMPLE_QUESTION: Record<AskTopic, string> = {
   seats: "how many seats in your car, counting you?",
   item: "can you bring it?",
   poll: "what do you think?",
+  interview: "say skip if you'd rather not",
+  interest: "anything you're hoping to do? or idc works",
+  constraint: "anything i should plan around? nah works too",
 };
 
 /** The fixed wording for every intent. Used directly, or as the draft for Gemini. */
@@ -88,6 +91,8 @@ function topicLabel(topic: AskTopic, item: string | null): string {
   if (topic === "drive" || topic === "seats") return "driving";
   if (topic === "budget") return "their budget";
   if (topic === "poll") return "your question";
+  if (topic === "interview") return "the trip setup";
+  if (topic === "interest" || topic === "constraint") return "what they're into";
   return "whether they're coming";
 }
 

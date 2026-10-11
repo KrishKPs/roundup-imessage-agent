@@ -17,7 +17,7 @@ describe("organizer adds people", () => {
     const org = phoneFor(0);
     await h.say(org, "camping trip saturday");
     await h.say(org, "Krish");
-    expect(h.transport.to(org).at(-1)).toMatch(/who's coming\? type their names and numbers here/);
+    expect(h.transport.to(org).join(" ")).toMatch(/who's coming\? type their names and numbers here/);
     expect(h.transport.to(org).join(" ")).not.toContain("sms:"); // no invite link on a shared line
     await h.engine.handleContacts(org, [{ name: "Sam", phone: "(704) 555-1001" }, { name: "Maya", phone: "+19195551002" }]);
     const sam = "+17045551001";
