@@ -102,9 +102,10 @@ function ackText(topic: AskTopic, value: "yes" | "no" | "maybe" | "skip" | "done
  * and anything with exact wording to copy (commands like "start") stay as templates.
  */
 const LLM_OK = new Set<MessageIntent["kind"]>([
-  "ask_rsvp", "ask_drive", "ask_item", "ask_budget", "ask_seats", "ask_poll", "nudge", "reask", "drop_ack", "ack",
-  "waiting_for_start", "all_set", "late_ack", "noted_car", "handoff_member", "organizer_drop",
-  "needs_added", "question_answer", "already_member",
+  // Standalone acks ("got it, that stays between us") stay templates: instant beats varied for a one-liner.
+  // An ack paired with the next question is still reworded, since the question decides the pair.
+  "ask_rsvp", "ask_drive", "ask_item", "ask_budget", "ask_seats", "ask_poll", "nudge", "reask", "drop_ack",
+  "waiting_for_start", "all_set", "handoff_member", "organizer_drop", "question_answer", "already_member",
 ]);
 
 export function makePhraser(llm: Llm | null): Phraser {

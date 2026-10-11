@@ -111,7 +111,8 @@ export function handleCommand(env: CommandEnv, phone: Phone, text: string): bool
   }
 
   const verb = organizerVerb(t);
-  const organizerCmd = verb !== null || /^need\s+/i.test(t);
+  const NEED = /^(?:we(?:'ll| will)? (?:also )?need|need|also need)\s+(?:someone (?:to bring|with)\s+)?/i;
+  const organizerCmd = verb !== null || NEED.test(t);
   if (!organizerCmd || !trip) return false;
   if (!isOrganizer) {
     ctx.out(phone, { kind: "not_organizer", organizer: organizerName(trip) });
@@ -145,7 +146,7 @@ export function handleCommand(env: CommandEnv, phone: Phone, text: string): bool
   }
 
   // need <item>, <item>
-  const items = t.replace(/^need\s+/i, "").split(/,|\band\b/).map((s) => s.trim().replace(/^(a|an|the)\s+/i, "").toLowerCase()).filter(Boolean);
+  const items = t.replace(NEED, "").split(/,|\band\b/).map((s) => s.trim().replace(/^(a|an|the)\s+/i, "").toLowerCase()).filter(Boolean);
   const added = items.filter((label) => !trip.needs.some((n) => n.kind === "item" && n.label === label));
   for (const label of added) trip.needs.push(newNeed("item", label, 1));
   if (trip.status === "finalized" && added.length) trip.status = "coordinating";

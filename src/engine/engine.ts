@@ -558,8 +558,9 @@ export class Engine {
     // One person's texts go out in order, each phrased knowing what the previous one said (no double greetings).
     const deliver = async (phone: Phone) => {
       const context: Turn[] = this.historyOf(phone).slice(-4);
+      const trip = this.tripOf(phone);
       for (const intent of pairAcks(groups.get(phone)!)) {
-        const text = await this.deps.phrase(intent, context);
+        const text = trip ? fixNames(await this.deps.phrase(intent, context), trip) : await this.deps.phrase(intent, context);
         context.push({ from: "bot", text });
         if (this.lastSent.get(phone) === text) continue; // never repeat ourselves word for word
         try {
@@ -625,6 +626,17 @@ function pairAcks(intents: MessageIntent[]): MessageIntent[] {
       out.push({ kind: "pair", first: cur, second: next });
       i++;
     } else out.push(cur);
+  }
+  return out;
+}
+
+/** Models sometimes write "sam" or "beach day"; names and the trip title always go out as written. "??" -> "?". */
+export function fixNames(text: string, trip: Trip): string {
+  const proper = [trip.title, ...Object.values(trip.members).map((m) => m.name)].filter((n) => n && n.length > 1);
+  let out = text.replace(/\?{2,}/g, "?");
+  for (const n of proper) {
+    const esc = n.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+    out = out.replace(new RegExp(`\\b${esc}\\b`, "gi"), n);
   }
   return out;
 }

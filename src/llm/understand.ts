@@ -26,6 +26,7 @@ const NO_DRIVE = /\b(can'?t drive|no car|don'?t have a car|i don'?t drive|cannot
 const SKIP_BUDGET = /\b(no limit|whatever|flexible|don'?t care|any(thing)?|skip|rather not|prefer not|pass)\b/;
 const NUMBER_WORDS: Record<string, number> = {
   one: 1, two: 2, three: 3, four: 4, five: 5, six: 6, seven: 7, eight: 8, nine: 9, ten: 10,
+  twenty: 20, thirty: 30, forty: 40, fourty: 40, fifty: 50, sixty: 60, seventy: 70, eighty: 80, ninety: 90, hundred: 100,
 };
 
 function firstNumber(t: string): number | null {
