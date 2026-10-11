@@ -11,8 +11,8 @@ export type Phraser = (intent: MessageIntent, history?: { from: "them" | "bot"; 
 
 const SIMPLE_QUESTION: Record<AskTopic, string> = {
   name: "what's your first name?",
-  rsvp: "are you coming?",
-  budget: "roughly what's the most you'd want to spend? totally fine to skip it",
+  rsvp: "you coming?",
+  budget: "roughly what's the most you'd wanna spend? fine to skip it",
   drive: "can you drive?",
   seats: "how many seats in your car, counting you?",
   item: "can you bring it?",
@@ -23,58 +23,58 @@ const SIMPLE_QUESTION: Record<AskTopic, string> = {
 export function template(i: MessageIntent): string {
   switch (i.kind) {
     case "text": return i.text;
-    case "ask_name_member": return `hey! i'm Roundup, an AI helping ${i.organizer} plan ${i.trip}. what's your first name?`;
-    case "ask_name_organizer": return "hey! i'm Roundup, an AI that plans group trips over text so the group chat doesn't have to. what's your first name?";
-    case "intro": return `hey ${i.name}! i'm Roundup, an AI helping ${i.organizer} plan ${i.trip}. i'll ask you a few quick things here so the group chat stays quiet. reply stop anytime.`;
+    case "ask_name_member": return `hey, i'm Roundup, an AI helping ${i.organizer} plan ${i.trip}. what's your first name?`;
+    case "ask_name_organizer": return "hey, i'm Roundup, an AI that plans group trips over text so the group chat doesn't have to. what's your first name?";
+    case "intro": return `hey ${i.name}, i'm Roundup, an AI helping ${i.organizer} plan ${i.trip}. i'll ask a few quick things here so the group chat stays quiet. reply stop anytime.`;
     case "trip_created":
       return i.joinByLink
-        ? `nice to meet you ${i.name}! ${i.trip} is set up, code ${i.code}. paste the next text in your group chat, then text start when everyone's in.`
-        : `nice to meet you ${i.name}! ${i.trip} is set up. who's coming? type their names and numbers here, like: Sam 704 555 1234 (or share contacts from the Contacts app)`;
+        ? `nice to meet you ${i.name}. ${i.trip} is set up, code ${i.code}. paste the next text in your group chat, then text start when everyone's in.`
+        : `nice to meet you ${i.name}. ${i.trip} is set up. who's coming? type their names and numbers here, like: Sam 704 555 1234 (or share contacts from the Contacts app)`;
     case "invite_line":
       return i.agentNumber
         ? `${i.organizer} is planning ${i.trip}! tap to join: ${joinLink(i.agentNumber, i.code)} (or text "join ${i.code}" to ${i.agentNumber}). Roundup, an AI, sorts out the details with you 1:1.`
         : `${i.organizer} is planning ${i.trip}! text "join ${i.code}" to this number and Roundup will sort out the details with you 1:1.`;
     case "ask_rsvp": return `you in for ${i.trip}${i.date ? ` on ${i.date}` : ""}?`;
-    case "ask_budget": return "what's the most you'd want to spend on this trip? stays private, i only share the group's lowest number.";
-    case "ask_drive": return `can you drive for ${i.trip}? if yes, how many seats including you?`;
-    case "ask_seats": return "nice! how many seats in your car, including you?";
-    case "ask_item": return `could you bring a ${i.item} for ${i.trip}?`;
+    case "ask_budget": return "what's the most you'd wanna spend? nobody sees it but me";
+    case "ask_drive": return `any chance you can drive for ${i.trip}?`;
+    case "ask_seats": return "appreciate that. how many seats, counting you?";
+    case "ask_item": return `could you bring a ${i.item}?`;
     case "reask": return `sorry, didn't catch that. ${SIMPLE_QUESTION[i.topic].replace("it?", i.item ? `a ${i.item}?` : "it?")}`;
     case "nudge": return `hey ${i.name}, no rush. ${SIMPLE_QUESTION[i.topic].replace("it?", i.item ? `a ${i.item}?` : "it?")}`;
     case "ack": return ackText(i.topic, i.value);
-    case "handoff_member": return `no worries, i'll let ${i.organizer} follow up with you.`;
+    case "handoff_member": return `no worries, i'll have ${i.organizer} follow up with you.`;
     case "handoff_organizer": return `heads up: i couldn't get a clear answer from ${i.name} about ${topicLabel(i.topic, i.item)}. can you check with them?`;
     case "question_answer": {
       const what = `${i.organizer}'s planning ${i.trip}${i.date ? ` (${i.date})` : ""}.`;
       const next = i.collecting
-        ? ` once ${i.organizer} kicks it off, i'll ask you a few quick things here.`
-        : " i'm sorting out who's in, rides, and what to bring, then i'll text you your plan.";
+        ? ` i'll text you a few quick things once it kicks off.`
+        : " i'm sorting rides and who brings what, then i'll text you your plan.";
       return `${what}${next}${i.flagged ? ` i've asked ${i.organizer} about the rest.` : ""}`;
     }
     case "question_organizer":
       if (i.note && i.fyi) return `heads up from ${i.name}: ${i.note}`;
       if (i.note) return `${i.name} asked: ${i.note} text them back when you get a sec.`;
       return `${i.name} has a question about the trip that i couldn't answer. can you text them?`;
-    case "drop_ack": return `totally get it ${i.name}, you're off the list. thanks for telling me!`;
-    case "organizer_drop": return `heads up: ${i.name} can't come anymore. i'm rebalancing the plan.`;
+    case "drop_ack": return "all good, it happens. i'll take you off the list.";
+    case "organizer_drop": return `heads up: ${i.name} can't come anymore. i'm reworking the plan.`;
     case "short_organizer": return `heads up: we're ${i.missing} ${i.unit} short for ${i.label} and i've asked everyone who could help. any ideas?`;
-    case "stop_confirm": return "got it, you won't hear from me again. take care!";
+    case "stop_confirm": return "got it, you won't hear from me again. take care";
     case "unknown_code": return "hmm, i don't know that code. can you double-check it with whoever invited you?";
-    case "help": return "hey! i'm Roundup, an AI that plans group trips over text. planning something? tell me what and when, like \"camping trip saturday\". got a code? just send it.";
-    case "already_member": return `you're already in ${i.trip}!`;
-    case "waiting_for_start": return `you're all set! i'll text you once ${i.organizer} kicks things off.`;
-    case "started_organizer": return `we're rolling! i'm texting ${i.count === 1 ? "them" : i.count === 2 ? "both of them" : `all ${i.count} people`} now. text status anytime.`;
+    case "help": return "hey, i'm Roundup, an AI that plans group trips over text. planning something? tell me what and when, like \"camping trip saturday\". got a code? just send it.";
+    case "already_member": return `you're already in ${i.trip}`;
+    case "waiting_for_start": return `you're all set. i'll text you once ${i.organizer} kicks things off.`;
+    case "started_organizer": return `we're rolling. i'm texting ${i.count === 1 ? "them" : i.count === 2 ? "both of them" : `all ${i.count} people`} now. text status anytime.`;
     case "needs_added": return `added: ${i.items.join(", ")}. i'll find people to bring them.`;
     case "not_organizer": return `only ${i.organizer} can do that one.`;
-    case "late_ack": return "thanks, got it!";
-    case "noted_car": return "good to know, thanks! i'll keep that in mind.";
-    case "all_set": return "you're all set for now. i'll text you if anything changes.";
-    case "invited": return `hey${i.name ? ` ${i.name}` : ""}!${i.again ? " (sending again in case this got lost)" : ""} ${i.organizer} added you to ${i.trip}${i.date ? ` (${i.date})` : ""}. i'm Roundup, an AI helping plan it 1:1 so the group chat stays quiet. reply stop anytime.`;
+    case "late_ack": return "got it, thanks";
+    case "noted_car": return "good to know, i'll keep that in mind";
+    case "all_set": return "all set. i'll only text again with the final plan";
+    case "invited": return `hey${i.name ? ` ${i.name}` : ""},${i.again ? " (sending again in case this got lost)" : ""} ${i.organizer} added you to ${i.trip}${i.date ? ` (${i.date})` : ""}. i'm Roundup, an AI helping plan it 1:1 so the group chat stays quiet. reply stop anytime.`;
     case "people_added": return `added ${listNames(i.names)}, texting them now${i.skipped ? ` (skipped ${i.skipped} already in or opted out)` : ""}. ${i.started ? "they'll get the questions now." : "send more anytime, or say start when everyone's in."}`;
-    case "ask_what_planning": return "hey! i'm Roundup, an AI that plans group trips over text. what are you planning, and when? anything works. got a code from a friend? just send it.";
-    case "organizer_ready": return `hey ${i.name}! i'm Roundup, an AI planning ${i.trip} with you. share your link in the group chat, then text start when everyone's in.`;
+    case "ask_what_planning": return "hey, i'm Roundup, an AI that plans group trips over text. what are you planning, and when? anything works. got a code from a friend? just send it.";
+    case "organizer_ready": return `hey ${i.name}, i'm Roundup, an AI planning ${i.trip} with you. share your link in the group chat, then text start when everyone's in.`;
     case "ask_poll": return `${i.organizer} wanted to ask you: ${i.question}`;
-    case "poll_ack": return `got it, i'll let ${i.organizer} know.`;
+    case "poll_ack": return `got it, i'll let ${i.organizer} know`;
     case "status_report": return i.text;
     case "poll_report": return summarizeAnswers(i.question, i.open, i.answers, i.silent);
     case "pair": return `${template(i.first)} ${template(i.second)}`;
@@ -93,14 +93,14 @@ function topicLabel(topic: AskTopic, item: string | null): string {
 
 function ackText(topic: AskTopic, value: "yes" | "no" | "maybe" | "skip" | "done"): string {
   if (topic === "rsvp") {
-    if (value === "yes") return "awesome!";
-    if (value === "maybe") return "no stress, i'll plan like you're in. just tell me if that changes.";
-    return "no worries, thanks for letting me know!";
+    if (value === "yes") return "nice, you're in";
+    if (value === "maybe") return "no stress, i'll plan like you're in. just tell me if it changes";
+    return "no worries, thanks for telling me";
   }
-  if (topic === "budget") return value === "skip" ? "all good." : "got it, that stays between us.";
-  if (topic === "drive" || topic === "seats") return value === "yes" ? "amazing, thank you!" : "no worries!";
-  if (topic === "item") return value === "yes" ? "perfect, thanks!" : "all good!";
-  return "got it!";
+  if (topic === "budget") return value === "skip" ? "easy, i'll plan around everyone else" : "noted, that stays with me";
+  if (topic === "drive" || topic === "seats") return value === "yes" ? "perfect, thank you" : "no stress, i'll get you in someone's car";
+  if (topic === "item") return value === "yes" ? "perfect, that's your job then" : "np, i'll ask around";
+  return "got it";
 }
 
 /**

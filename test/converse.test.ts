@@ -105,7 +105,7 @@ describe("talking like a person", () => {
   });
 
   it("rewrites must keep the AI disclosure, stop option, trip name, and the single question", () => {
-    const draft = "hey Sam! i'm Roundup, an AI helping Krish plan CAMP. reply stop anytime.";
+    const draft = "hey Sam, i'm Roundup, an AI helping Krish plan CAMP. reply stop anytime.";
     const intent = { kind: "intro", name: "Sam", trip: "CAMP", organizer: "Krish" } as const;
     expect(isSafeRewrite(draft, "yo Sam! roundup here, an AI helping Krish with CAMP. text stop to opt out", intent)).toBe(true);
     expect(isSafeRewrite(draft, "yo Sam! helping Krish with CAMP. text stop to opt out", intent)).toBe(false);

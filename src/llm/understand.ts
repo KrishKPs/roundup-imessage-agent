@@ -17,11 +17,14 @@ const parsedSchema = z.object({
   confidence: z.number().min(0).max(1),
 });
 
-const YES = /^(y|ya|yes|yess+|yeah|yea|yep|yup|sure|ok|okay|k|definitely|absolutely|of course|for sure|i'?m in|im in|count me in|down|i'?m down|totally|bet|sounds good|yes please)\b/;
+const YES = /^(y|ya|yes|yess+|yeah|yea|yep|yup|sure|ok|okay|k|fine|ok fine|definitely|absolutely|of course|for sure|i'?m in|im in|count me in|down|i'?m down|totally|bet|sounds good|yes please|obviously|duh)\b/;
+/** "yeah as long as we're back by 8": still a yes, with a catch the organizer should hear about. */
+const CATCH = /\b(as long as|only if|unless|but|back by|leave by|home by|(before|after|till|until) \d)\b/;
 const NO = /^(n|no|nope|nah|nay|not really|sorry no|no sorry|can'?t|cannot|i can'?t|unfortunately not|negative)\b/;
 const MAYBE = /\b(maybe|not sure|possibly|idk|i don'?t know|might|prob|probably|tbd|unsure|depends)\b/;
 const DROP = /\b(can'?t (make it|come)( anymore)?|cannot (come|make it)|not (coming|going) anymore|have to (bail|cancel)|i'?m out\b|drop(ping)? out|gotta bail|won'?t be able to (come|make it))\b/;
 const CAR = /\b(i have a car|i'?ve got a car|i got a car|i can drive|i('ll| will) drive|my car|i have a (van|truck|suv))\b/;
+const RELUCTANT = /\b(rather not|if no ?one else|if nobody else|only if (you|we) (really )?need|last resort|if i have to|if i must|if (it'?s|its) needed|if needed)\b/;
 const NO_DRIVE = /\b(can'?t drive|no car|don'?t have a car|i don'?t drive|cannot drive)\b/;
 const SKIP_BUDGET = /\b(no limit|whatever|flexible|don'?t care|any(thing)?|skip|rather not|prefer not|pass)\b/;
 const NUMBER_WORDS: Record<string, number> = {
@@ -68,7 +71,7 @@ export function keywordParse(raw: string, topic: AskTopic | null): ParsedReply {
   switch (topic) {
     case "poll":
     case "rsvp": {
-      const r = blank(short ? 0.9 : 0.5);
+      const r = blank(short || (yes && !no && CATCH.test(t) && !raw.includes("?")) ? 0.9 : 0.5);
       if (maybe) r.rsvp = "maybe";
       else if (yes) r.rsvp = "yes";
       else if (no) r.rsvp = "no";
@@ -85,6 +88,7 @@ export function keywordParse(raw: string, topic: AskTopic | null): ParsedReply {
     }
     case "drive":
     case "seats": {
+      if (RELUCTANT.test(t)) return { ...blank(0.9), canDrive: false, backup: true };
       if (no || NO_DRIVE.test(t)) return { ...blank(0.9), canDrive: false };
       if (num !== null && (yes || topic === "seats" || /seat|spot|people|fit|car/.test(t) || words <= 2)) {
         return { ...blank(0.9), canDrive: true, seats: num };

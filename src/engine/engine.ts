@@ -415,10 +415,10 @@ export class Engine {
       return this.unclear(trip, m, ask);
     }
     if (isStale) m.staleAsk = null;
-    this.applyAnswer(trip, m, ask, parsed, isStale);
+    this.applyAnswer(trip, m, ask, parsed, isStale, text);
   }
 
-  private applyAnswer(trip: Trip, m: Member, ask: Ask, parsed: ParsedReply, isStale: boolean): void {
+  private applyAnswer(trip: Trip, m: Member, ask: Ask, parsed: ParsedReply, isStale: boolean, text = ""): void {
     const ctx = this.ctx;
     const close = () => (isStale ? undefined : resolvePending(ctx, trip, m));
 
@@ -429,7 +429,13 @@ export class Engine {
         if (parsed.seats) m.seats = parsed.seats;
       }
       if (parsed.canDrive === false) m.carHint = false;
-      ctx.out(m.phone, { kind: "ack", topic: "rsvp", value: parsed.rsvp! });
+      const condition = m.rsvp !== "no" ? rsvpCondition(text) : null;
+      if (condition) {
+        // "yeah as long as we're back by 8": they're in, and the organizer should know the catch.
+        (trip.notes ??= []).push({ name: m.name || "someone", note: condition, at: ctx.now() });
+        if (m.phone !== trip.organizer) ctx.out(trip.organizer, { kind: "question_organizer", name: m.name || "someone", note: condition, fyi: true });
+        ctx.out(m.phone, { kind: "text", text: `noted, i'll flag that to ${organizerName(trip)}` });
+      } else ctx.out(m.phone, { kind: "ack", topic: "rsvp", value: parsed.rsvp! });
       ctx.log(trip, "answered", m.rsvp === "yes" ? `${m.name} is in` : m.rsvp === "maybe" ? `${m.name} is a maybe` : `${m.name} can't make it`);
       close();
       if (isGoing(m) && m.budgetCap === null) enqueueAsk(ctx, trip, m, "budget");
@@ -459,6 +465,11 @@ export class Engine {
     if (result === "need_seat_count") {
       close();
       enqueueAsk(ctx, trip, m, "seats", need.id);
+      return;
+    }
+    if (result === "backup") {
+      ctx.out(m.phone, { kind: "text", text: "got it, you're my backup. i'll try others first" });
+      close();
       return;
     }
     if (result === "ignored") ctx.out(m.phone, { kind: "late_ack" });
@@ -692,8 +703,8 @@ export class Engine {
     const org = organizerName(trip);
     const heads = clip(`i can't text ${who} first, but they're all set up. copy the next message and send it to them:`);
     const invite = clip(line
-      ? `hey${name ? ` ${name}` : ""}! i'm planning ${trip.title} with Roundup, an AI that sorts it out 1:1. text "hi" to ${line} to join`
-      : `hey${name ? ` ${name}` : ""}! i'm planning ${trip.title} with Roundup, an AI that sorts it out 1:1. text "hi" to the Roundup number to join`);
+      ? `hey${name ? ` ${name}` : ""}, i'm planning ${trip.title} with Roundup, an AI that sorts it out 1:1. text "hi" to ${line} to join`
+      : `hey${name ? ` ${name}` : ""}, i'm planning ${trip.title} with Roundup, an AI that sorts it out 1:1. text "hi" to the Roundup number to join`);
     this.log(trip, "handoff", `couldn't reach ${name || "an invitee"}, gave ${org} an invite to forward`);
     try {
       await this.deps.transport.send(trip.organizer, heads);
@@ -748,4 +759,17 @@ function safeNote(note: string | null | undefined, m: Member, facts: string, tex
   if (!n || /\$|\bbudget\b|\bbucks\b|\bdollars?\b/i.test(n)) return null;
   if (m.budgetCap !== null && new RegExp(`\\b${m.budgetCap}\\b`).test(n)) return null;
   return replyIsGrounded(n, facts, text) ? n : null;
+}
+
+/**
+ * The catch in an RSVP, if there is one: "yeah as long as were back by 8" -> "as long as were back by 8".
+ * Only clear conditions (times, "as long as", "only if"...), never money.
+ */
+export function rsvpCondition(text: string): string | null {
+  const t = text.trim();
+  const m = t.match(/\b(as long as .+|only if .+|unless .+|but (?:i |im |i'm |i'?ll |i have |i gotta |i need |not |only |no |gotta |have to |need to ).+|(?:need|have|gotta|got) to (?:be back|leave|head out|go) .+|not (?:waking|getting) up .+|(?:back|home|leave|leaving) by .+|(?:after|before|till|until) \d.*)$/i);
+  if (!m) return null;
+  const c = m[1].replace(/[.!]+$/, "").trim();
+  if (c.length < 6 || c.length > 120 || /\$|\bbudget\b|\bbucks\b|\bdollars?\b/i.test(c)) return null;
+  return c;
 }

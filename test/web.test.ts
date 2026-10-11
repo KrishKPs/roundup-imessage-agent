@@ -15,10 +15,10 @@ describe("website trip creation and trip link", () => {
     expect(Object.keys(h.trip().members)).toEqual([org, sam, maya]);
 
     await h.say(org, "hi Roundup! i'm Krish, planning Beach day");
-    expect(h.transport.to(org)).toEqual([expect.stringMatching(/hey Krish! i'm Roundup, an AI planning Beach day.*start/)]);
+    expect(h.transport.to(org)).toEqual([expect.stringMatching(/hey Krish, i'm Roundup, an AI planning Beach day.*start/)]);
 
     await h.say(sam, `hi! i'm Sam, joining Beach day (${code})`);
-    expect(h.transport.to(sam).join(" ")).toMatch(/hey Sam! i'm Roundup, an AI helping Krish plan Beach day.*stop/);
+    expect(h.transport.to(sam).join(" ")).toMatch(/hey Sam, i'm Roundup, an AI helping Krish plan Beach day.*stop/);
 
     // Maya hasn't texted yet: start skips her, and she gets the RSVP question once she does.
     await h.say(org, "start");

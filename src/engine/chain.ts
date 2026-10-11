@@ -2,7 +2,7 @@
 import type { Member, Need, ParsedReply, Phone, Trip } from "../types.js";
 import { newId } from "../util.js";
 import { MAX_UNANSWERED, cancelAsksFor, enqueueAsk } from "./asks.js";
-import { type Ctx, byJoin, goingMembers, organizerName, seatsNeed } from "./context.js";
+import { type Ctx, isGoing, byJoin, goingMembers, organizerName, seatsNeed } from "./context.js";
 
 export function newNeed(kind: Need["kind"], label: string, quantityNeeded: number): Need {
   return {
@@ -69,7 +69,22 @@ export function runChain(ctx: Ctx, trip: Trip, need: Need): void {
 
   if (need.waitingOn) return; // sequential: wait for the current person
 
-  const next = need.candidates.find((p) => eligible(trip, need, p));
+  let next = need.candidates.find((p) => eligible(trip, need, p));
+  if (!next && need.kind === "seats") {
+    // Nobody else can: go back to a backup driver, once.
+    const backup = need.declined.find((p) => {
+      const b = trip.members[p];
+      return b?.backupDriver && !b.backupAsked && !b.optedOut && isGoing(b);
+    });
+    if (backup) {
+      const b = trip.members[backup];
+      b.backupAsked = true;
+      b.canDrive = null;
+      need.declined = need.declined.filter((p) => p !== backup);
+      next = backup;
+      ctx.log(trip, "asked", `going back to ${b.name}, the backup driver`);
+    }
+  }
   if (!next) {
     const missing = Math.max(0, need.quantityNeeded - need.quantityFilled);
     if (missing === 0) return; // nothing needed yet (e.g. nobody going)
@@ -96,12 +111,20 @@ export function runChain(ctx: Ctx, trip: Trip, need: Need): void {
   enqueueAsk(ctx, trip, trip.members[next], need.kind === "seats" ? "drive" : "item", need.id);
 }
 
-export type ChainAnswer = "provided" | "declined" | "need_seat_count" | "ignored";
+export type ChainAnswer = "provided" | "declined" | "backup" | "need_seat_count" | "ignored";
 
 /** Apply someone's answer to a drive/seats/item question. Late answers (after we moved on) still count. */
 export function applyChainAnswer(ctx: Ctx, trip: Trip, need: Need, m: Member, parsed: ParsedReply): ChainAnswer {
   if (need.waitingOn === m.phone) need.waitingOn = null;
   if (need.kind === "seats") {
+    if (parsed.backup && !m.backupAsked) {
+      // Willing as a last resort: count them out for now, come back only if nobody else can drive.
+      m.canDrive = false;
+      m.backupDriver = true;
+      if (!need.declined.includes(m.phone)) need.declined.push(m.phone);
+      ctx.log(trip, "answered", `${m.name} can drive as a backup`);
+      return "backup";
+    }
     if (parsed.canDrive === false) {
       m.canDrive = false;
       if (!need.declined.includes(m.phone)) need.declined.push(m.phone);

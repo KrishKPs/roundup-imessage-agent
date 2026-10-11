@@ -103,6 +103,31 @@ const CASES: Case[] = [
   { name: "budget words", from: "Maya", text: "idk like forty bucks?", started: true,
     setup: (t) => { t.members[P.Maya].rsvp = "yes"; t.members[P.Maya].pendingAsk = { id: "a1", topic: "budget", needId: null, askedAt: 1, nudged: false }; },
     check: (r) => (r.trip.members[P.Maya].budgetCap === 40 ? null : `budget ${r.trip.members[P.Maya].budgetCap}`) },
+  // from the team's 500 reference conversations (human_conversations_500.jsonl)
+  { name: "ref: yes with a catch", from: "Leo", text: "yeah as long as were back by 8", started: true,
+    check: (r) => first(r.trip.members[P.Leo].rsvp === "yes" ? null : `rsvp ${r.trip.members[P.Leo].rsvp}`, r.others.Krish?.some((t) => /back by 8/.test(t)) ? null : "organizer didn't hear the catch") },
+  { name: "ref: fine but", from: "Maya", text: "fine but im not waking up before 9", started: true,
+    check: (r) => (r.trip.members[P.Maya].rsvp === "yes" ? null : `rsvp ${r.trip.members[P.Maya].rsvp}`) },
+  { name: "ref: check calendar", from: "Sam", text: "lemme check my calendar", started: true,
+    check: (r) => (r.replies.join(" ").length <= 60 ? null : "too long for 'lemme check'") },
+  { name: "ref: budget 10 skull", from: "Maya", text: "10 💀", started: true,
+    setup: (t) => { t.members[P.Maya].rsvp = "yes"; t.members[P.Maya].pendingAsk = { id: "a3", topic: "budget", needId: null, askedAt: 1, nudged: false }; },
+    check: (r) => (r.trip.members[P.Maya].budgetCap === 10 ? null : `budget ${r.trip.members[P.Maya].budgetCap}`) },
+  { name: "ref: reluctant driver", from: "Sam", text: "id rather not but i can if no one else does", started: true,
+    setup: (t) => {
+      t.members[P.Sam].rsvp = "yes";
+      t.needs.push({ id: "n1", kind: "seats", label: "seats", quantityNeeded: 3, quantityFilled: 0, candidates: [], asked: [P.Sam], declined: [], providers: [], status: "open", waitingOn: P.Sam, shortNotified: null });
+      t.members[P.Sam].pendingAsk = { id: "a4", topic: "drive", needId: "n1", askedAt: 1, nudged: false };
+    },
+    check: (r) => has(r, /backup/i, "didn't make them the backup") },
+  { name: "ref: bad news", from: "Leo", text: "hey so bad news", started: true,
+    setup: (t) => { t.members[P.Leo].rsvp = "yes"; t.members[P.Leo].pendingAsk = null; },
+    check: (r) => first(r.replies.join(" ").length <= 60 ? null : "too long", r.trip.members[P.Leo].rsvp === "yes" ? null : "dropped them too early") },
+  { name: "ref: rain", from: "Sam", text: "is it gonna rain", check: (r) => lacks(r, /\b(sunny|clear skies|\d+%|degrees|forecast says)\b/i, "made up a forecast") },
+  { name: "ref: thanks for organizing", from: "Maya", text: "thanks for organizing btw", check: (r) => has(r, /Krish/, "didn't credit the organizer") },
+  { name: "ref: take me off", from: "Leo", text: "take me off the list pls", started: true,
+    setup: (t) => { t.members[P.Leo].rsvp = "yes"; t.members[P.Leo].pendingAsk = null; },
+    check: (r) => (r.trip.members[P.Leo].rsvp === "no" || r.trip.members[P.Leo].optedOut ? null : "still on the list") },
   { name: "drop out", from: "Leo", text: "ugh something came up, i can't come anymore sorry", started: true,
     setup: (t) => { t.members[P.Leo].rsvp = "yes"; t.members[P.Leo].pendingAsk = null; },
     check: (r) => (r.trip.members[P.Leo].rsvp === "no" ? null : "not dropped") },
@@ -154,6 +179,8 @@ function voiceIssues(r: Result): string | null {
   for (const t of r.replies) {
     if (t.length > 330) return `too long (${t.length})`;
     if ((t.match(/\?/g) ?? []).length > 1) return `more than one question: "${t}"`;
+    if (/!/.test(t) && !/\bAI\b/.test(t)) return `exclamation mark (reference style has none): "${t}"`;
+    if (/[\u{1F300}-\u{1FAFF}\u{2600}-\u{27BF}]/u.test(t)) return `emoji (reference style has none): "${t}"`;
     if (/\b(krish|sam|maya|leo)\b/.test(t)) return `lowercase name: "${t}"`;
     if (/great question|as an ai language model|i'm just an ai/i.test(t)) return `robotic phrase: "${t}"`;
   }
@@ -183,4 +210,6 @@ for (const { c, fail, r } of results) {
 const passed = results.filter((x) => !x.fail).length;
 const times = results.map((x) => x.r.firstMs ?? x.r.ms).sort((a, b) => a - b);
 const slow = times.filter((t) => t > 4000).length;
+const lens = results.flatMap((x) => x.r.replies.map((t) => t.length)).sort((a, b) => a - b);
+console.log(`reply length: median ${lens[Math.floor(lens.length / 2)]} chars (reference set: 31), p90 ${lens[Math.floor(lens.length * 0.9)]} (reference: 49)`);
 console.log(`\n${passed}/${results.length} passed   reply time: median ${times[Math.floor(times.length / 2)]} ms, slowest ${times.at(-1)} ms, ${slow} over 4 s`);

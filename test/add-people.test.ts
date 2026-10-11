@@ -22,7 +22,7 @@ describe("organizer adds people", () => {
     await h.engine.handleContacts(org, [{ name: "Sam", phone: "(704) 555-1001" }, { name: "Maya", phone: "+19195551002" }]);
     const sam = "+17045551001";
     expect(h.transport.to(sam)).toHaveLength(1);
-    expect(h.transport.to(sam)[0]).toMatch(/hey Sam! Krish added you to Camping trip \(saturday\).*AI.*stop/);
+    expect(h.transport.to(sam)[0]).toMatch(/hey Sam, Krish added you to Camping trip \(saturday\).*AI.*stop/);
     expect(h.transport.to(org).at(-1)).toMatch(/added Sam and Maya/);
     expect(h.trip().members[sam].invited).toBe(true);
 
@@ -39,12 +39,12 @@ describe("organizer adds people", () => {
     await h.say(org, "add 704 555 1003");
     const p = "+17045551003";
     expect(h.transport.to(p)).toEqual([
-      expect.stringMatching(/^hey! Priya added you to Beach day/),
+      expect.stringMatching(/^hey, Priya added you to Beach day/),
       "what's your first name, by the way?",
     ]);
     await h.say(p, "jo");
     expect(h.transport.to(p).at(-1)).toMatch(/nice to meet you Jo/);
-    expect(h.transport.to(p).join(" ")).not.toMatch(/hey Jo! i'm Roundup/);
+    expect(h.transport.to(p).join(" ")).not.toMatch(/hey Jo, i'm Roundup/);
   });
 
   it("never re-adds someone who said stop, and only the organizer can add", async () => {
@@ -94,10 +94,10 @@ describe("invite can't be delivered", () => {
     await h.say(org, "camping trip saturday");
     await h.say(org, "Hasti");
     await h.engine.handleContacts(org, [{ name: "Khush", phone: khush }]);
-    expect(h.transport.to(org).join(" ")).toMatch(/hey Khush! i'm planning .* text "hi" to \+16282647648 to join/);
+    expect(h.transport.to(org).join(" ")).toMatch(/hey Khush, i'm planning .* text "hi" to \+16282647648 to join/);
 
     blocked.done = true; // inbound always works: Khush texts the bot first
     await h.say(khush, "hi");
-    expect(h.transport.to(khush)[0]).toMatch(/hey Khush! Hasti added you to Camping trip/);
+    expect(h.transport.to(khush)[0]).toMatch(/hey Khush, Hasti added you to Camping trip/);
   });
 });

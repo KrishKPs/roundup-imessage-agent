@@ -61,6 +61,8 @@ export interface Member {
   invited?: boolean; // added by the organizer (contact card or number) rather than joining by code
   heardFrom?: boolean; // they have texted us at least once
   viaLink?: boolean; // signed up on the website (trip link); we greet them when they first text in
+  backupDriver?: boolean; // "i'd rather not but i can if no one else does": asked again only if nobody else can
+  backupAsked?: boolean; // we already went back to them once
 }
 
 export interface Need {
@@ -108,6 +110,7 @@ export interface ParsedReply {
   budgetCap: number | null;
   itemYes: boolean | null;
   confidence: number;
+  backup?: boolean; // can drive, but only if nobody else can
 }
 
 export interface State {

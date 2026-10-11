@@ -71,7 +71,9 @@ export function askIntent(trip: Trip, m: Member, ask: Ask): MessageIntent {
         : { kind: "ask_name_member", trip: trip.title, organizer: organizerName(trip) };
     case "rsvp": return { kind: "ask_rsvp", name: m.name, trip: trip.title, date: trip.dateText };
     case "budget": return { kind: "ask_budget", name: m.name };
-    case "drive": return { kind: "ask_drive", name: m.name, trip: trip.title };
+    case "drive":
+      if (m.backupAsked) return { kind: "text", text: "turns out nobody else can drive, so i need you after all. how many seats do you have?" };
+      return { kind: "ask_drive", name: m.name, trip: trip.title };
     case "seats": return { kind: "ask_seats", name: m.name };
     case "item": return { kind: "ask_item", name: m.name, item: need?.label ?? "something", trip: trip.title };
     case "poll": return { kind: "ask_poll", organizer: organizerName(trip), question: findPoll(trip, ask.pollId)?.question ?? "does the plan work for you?", open: true };
