@@ -20,7 +20,7 @@ export interface ConverseInput {
 }
 
 const organizerActions = ["reply", "ask_everyone", "tell_everyone", "status", "start", "send_plans", "add_items", "set_date"] as const;
-const memberActions = ["reply", "pass_to_organizer"] as const;
+const memberActions = ["reply", "pass_to_organizer", "tell_organizer"] as const;
 
 const schema = z.object({
   action: z.enum([...organizerActions, ...memberActions]),
@@ -28,6 +28,7 @@ const schema = z.object({
   open: z.boolean().nullable().optional(), // ask_everyone: true = free-text answers, false = yes/no
   items: z.array(z.string().max(30)).max(6).nullable().optional(), // add_items
   message: z.string().max(200).nullable().optional(), // tell_everyone
+  note: z.string().max(160).nullable().optional(), // pass_to_organizer / tell_organizer: short summary for the organizer
   date: z.string().max(40).nullable().optional(), // set_date
   reply: z.string().max(300).nullable().optional(),
 });
@@ -50,7 +51,9 @@ function prompt(i: ConverseInput): string {
 - "set_date": they're setting or changing the date/time. Put it in "date" as they said it (e.g. "saturday 12pm"). Just do it, don't question it.
 For anything other than "reply", leave "reply" null; the app sends its own confirmation.`
     : `- "reply": answer from the facts, or chat back. Use this for thanks, small talk, and questions the facts answer.
-- "pass_to_organizer": they asked something the facts don't answer (cost details, address, what to wear...). Reply saying you'll check with the organizer.`;
+- "pass_to_organizer": they asked something the facts don't answer (cost, address, plus-ones, what to bring...). Reply saying you'll check with the organizer. Put a short summary of their question in "note", in third person, e.g. "can they bring their bf?".
+- "tell_organizer": they shared something the organizer should know (running late, allergy, leaving early). Reply that you'll pass it on. Put a short summary in "note", e.g. "running about 30 min late".
+"note" goes only to the organizer: never put a budget or dollar amount in it.`;
 
   return `You're texting ${i.name || "someone"}, ${i.role === "organizer" ? "who organized this trip" : "a member of this trip"}.
 
@@ -68,7 +71,7 @@ ${actions}
 Reply style: like a friend texting. lowercase ok. 1-2 short sentences, under 200 characters. at most one emoji, usually none.
 Hard rules: never invent details that aren't in TRIP FACTS (no times, places, prices, names). never reveal anyone's budget except their own. never say you'll do something not in the action list. don't ask them questions (the app asks its own questions at the right time); just answer or acknowledge. don't repeat your last message, and don't greet them again mid-conversation. write names and the trip name exactly as given.
 
-Return JSON only: {"action": string, "question": string|null, "open": boolean|null, "items": string[]|null, "date": string|null, "message": string|null, "reply": string|null}`;
+Return JSON only: {"action": string, "question": string|null, "open": boolean|null, "items": string[]|null, "date": string|null, "message": string|null, "note": string|null, "reply": string|null}`;
 }
 
 export function makeConverser(llm: Llm | null): Converser | undefined {

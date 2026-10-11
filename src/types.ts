@@ -124,7 +124,7 @@ export type MessageIntent =
   | { kind: "handoff_member"; organizer: string }
   | { kind: "handoff_organizer"; name: string; topic: AskTopic; item: string | null }
   | { kind: "question_answer"; trip: string; date: string | null; organizer: string; collecting: boolean; flagged: boolean }
-  | { kind: "question_organizer"; name: string }
+  | { kind: "question_organizer"; name: string; note?: string | null; fyi?: boolean }
   | { kind: "drop_ack"; name: string }
   | { kind: "organizer_drop"; name: string }
   | { kind: "short_organizer"; label: string; missing: number; unit: string }

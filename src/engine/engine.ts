@@ -203,10 +203,13 @@ export class Engine {
           setDate(ctx, trip, res.date.trim());
           return true;
       }
-    } else if (res.action === "pass_to_organizer") {
-      ctx.out(m.phone, { kind: "text", text: reply ?? `good question, i'll check with ${organizerName(trip)} and get back to you.` });
-      ctx.out(trip.organizer, { kind: "question_organizer", name: m.name || "someone" });
-      ctx.log(trip, "handoff", `passed ${m.name || "someone"}'s question to ${organizerName(trip)}`);
+    } else if (res.action === "pass_to_organizer" || res.action === "tell_organizer") {
+      // Only the organizer gets a short summary, and only after the member is told it's being passed on (spec 10.2).
+      const fyi = res.action === "tell_organizer";
+      const org = organizerName(trip);
+      ctx.out(m.phone, { kind: "text", text: reply ?? (fyi ? `got it, i'll let ${org} know.` : `good question, i'll check with ${org} and get back to you.`) });
+      ctx.out(trip.organizer, { kind: "question_organizer", name: m.name || "someone", note: safeNote(res.note, m, facts, text), fyi });
+      ctx.log(trip, "handoff", `passed ${m.name || "someone"}'s ${fyi ? "note" : "question"} to ${org}`);
       return true;
     }
     if (!reply) return false;
@@ -639,4 +642,12 @@ export function fixNames(text: string, trip: Trip): string {
     out = out.replace(new RegExp(`\\b${esc}\\b`, "gi"), n);
   }
   return out;
+}
+
+/** The organizer's summary of a member's message: no money, no numbers they didn't say, never their budget. */
+function safeNote(note: string | null | undefined, m: Member, facts: string, text: string): string | null {
+  const n = note?.replace(/\s+/g, " ").trim().slice(0, 140);
+  if (!n || /\$|\bbudget\b|\bbucks\b|\bdollars?\b/i.test(n)) return null;
+  if (m.budgetCap !== null && new RegExp(`\\b${m.budgetCap}\\b`).test(n)) return null;
+  return replyIsGrounded(n, facts, text) ? n : null;
 }

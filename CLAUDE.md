@@ -529,7 +529,11 @@ re-run the affected chain the same way.
 
 1. A member's budget cap is never sent to another member, never to the organizer, and
    never shown on the dashboard. Only the group minimum is shared, under the rule in 9.6.
-2. Never forward or quote one member's message to another member.
+2. Never forward or quote one member's message to another member. *Changed Oct 10, 2026 (team
+   decision):* when a member asks something the bot can't answer, or shares something the organizer
+   should know (running late, an allergy), the **organizer only** gets a short summary
+   (`Sam asked: can they bring their bf?`, `heads up from Sam: running ~30 min late`), and only after
+   the member is told it's being passed on. Summaries never contain budgets or dollar amounts.
 3. Only message people who texted the agent first **or whom the organizer added** (contact
    card or typed number). Never message anyone else. *Changed Oct 10, 2026:* on the shared
    pool a number must be a registered project User before it can reach the agent at all,

@@ -50,7 +50,10 @@ export function template(i: MessageIntent): string {
         : " i'm sorting out who's in, rides, and what to bring, then i'll text you your plan.";
       return `${what}${next}${i.flagged ? ` i've asked ${i.organizer} about the rest.` : ""}`;
     }
-    case "question_organizer": return `${i.name} has a question about the trip that i couldn't answer. can you text them?`;
+    case "question_organizer":
+      if (i.note && i.fyi) return `heads up from ${i.name}: ${i.note}`;
+      if (i.note) return `${i.name} asked: ${i.note} text them back when you get a sec.`;
+      return `${i.name} has a question about the trip that i couldn't answer. can you text them?`;
     case "drop_ack": return `totally get it ${i.name}, you're off the list. thanks for telling me!`;
     case "organizer_drop": return `heads up: ${i.name} can't come anymore. i'm rebalancing the plan.`;
     case "short_organizer": return `heads up: we're ${i.missing} ${i.unit} short for ${i.label} and i've asked everyone who could help. any ideas?`;

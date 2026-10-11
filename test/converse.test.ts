@@ -79,12 +79,22 @@ describe("talking like a person", () => {
     expect(transport.to(sam)[0]).toMatch(/Krish's planning CAMP/);
   });
 
-  it("questions the facts can't answer go to the organizer without quoting the member", async () => {
-    const { transport, org, sam, say } = await setup();
-    await say(sam, "should i bring my own sleeping bag?", { action: "pass_to_organizer", reply: "good q, i'll check with Krish!" });
+  it("questions the facts can't answer go to the organizer only, as a short summary", async () => {
+    const { transport, org, sam, maya, say } = await setup();
+    await say(sam, "should i bring my own sleeping bag?", { action: "pass_to_organizer", note: "should they bring their own sleeping bag?", reply: "good q, i'll check with Krish!" });
     expect(transport.to(sam)).toEqual(["good q, i'll check with Krish!"]);
+    expect(transport.to(org).at(-1)).toBe("Sam asked: should they bring their own sleeping bag? text them back when you get a sec.");
+    expect(transport.to(maya)).toHaveLength(0);
+  });
+
+  it("FYIs reach the organizer, but a note with money in it falls back to the generic heads-up", async () => {
+    const { transport, org, sam, say, store } = await setup();
+    await say(sam, "i might be 30 min late", { action: "tell_organizer", note: "might be 30 min late", reply: "no worries, i'll tell Krish." });
+    expect(transport.to(org).at(-1)).toBe("heads up from Sam: might be 30 min late");
+    Object.values(store.state.trips)[0].members[sam].budgetCap = 40;
+    await say(sam, "can we keep it under 40", { action: "pass_to_organizer", note: "can it stay under $40?", reply: "i'll ask Krish." });
     expect(transport.to(org).at(-1)).toMatch(/Sam has a question/);
-    expect(transport.to(org).join(" ")).not.toContain("sleeping bag");
+    expect(transport.to(org).join(" ")).not.toContain("40");
   });
 
   it("members can't trigger organizer actions through the model", async () => {

@@ -59,19 +59,22 @@ them: "wait when is it again"
 {"action":"reply","reply":"saturday!"}
 
 them: "how much is this gonna cost"
-{"action":"pass_to_organizer","reply":"not sure yet, i'll check with Priya and get back to you."}
+{"action":"pass_to_organizer","note":"how much is it going to cost?","reply":"not sure yet, i'll check with Priya and get back to you."}
 
 them: "can i bring my gf"
-{"action":"pass_to_organizer","reply":"i'll ask Priya and let you know."}
+{"action":"pass_to_organizer","note":"can they bring their gf?","reply":"i'll ask Priya and let you know."}
 
 them: "where are we even going lol"
-{"action":"pass_to_organizer","reply":"Priya hasn't shared the spot with me yet, i'll ask."}
+{"action":"pass_to_organizer","note":"where are we going?","reply":"Priya hasn't shared the spot with me yet, i'll ask."}
 
 them: "whats sam's budget"
 {"action":"reply","reply":"that one's private, sorry! i only ever share the group's lowest number."}
 
 them: "i might be like 30 min late"
-{"action":"pass_to_organizer","reply":"no worries, i'll give Priya a heads up."}
+{"action":"tell_organizer","note":"might be about 30 min late","reply":"no worries, i'll give Priya a heads up."}
+
+them: "fyi im allergic to peanuts"
+{"action":"tell_organizer","note":"allergic to peanuts","reply":"good to know, i'll make sure Priya knows."}
 
 them: "lmaooo"
 {"action":"reply","reply":"haha"}
