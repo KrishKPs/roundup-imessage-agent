@@ -1,0 +1,104 @@
+<!doctype html>
+<!-- Roundup app home (installable: Share -> Add to Home Screen). The organizer's trips, remembered on this phone.
+     Members never need this: they only ever use iMessage. -->
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<link rel="manifest" href="/manifest.webmanifest">
+<meta name="theme-color" content="#2f9be0">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="default">
+<meta name="apple-mobile-web-app-title" content="Roundup">
+<link rel="apple-touch-icon" href="/apple-touch-icon.png">
+<script>if ("serviceWorker" in navigator) addEventListener("load", () => navigator.serviceWorker.register("/sw.js").catch(() => {}));</script>
+<title>Roundup</title>
+<link rel="stylesheet" href="/web.css">
+<style>
+  body { padding-top: env(safe-area-inset-top); padding-bottom: env(safe-area-inset-bottom); }
+  .top { display: flex; align-items: center; gap: 12px; margin: 6px 4px 18px; }
+  .top img { width: 44px; height: 44px; border-radius: 12px; box-shadow: 0 4px 12px rgba(30,110,160,.25); }
+  .top h1 { margin: 0; font-size: 30px; }
+  .trip { margin-bottom: 14px; }
+  .trip h2 { margin: 0; font-size: 24px; }
+  .trip .when { color: var(--muted); margin: 2px 0 12px; }
+  .row { display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 8px; }
+  .row a, .row button { display: grid; place-items: center; gap: 4px; padding: 12px 6px; border-radius: 14px; text-decoration: none;
+    font: 700 14px system-ui; color: var(--ink); background: #f2f8fc; border: 1px solid #d6e8f3; cursor: pointer; }
+  .row .ico { font-size: 22px; }
+  .newbtn { position: fixed; right: 18px; bottom: calc(18px + env(safe-area-inset-bottom)); width: 64px; height: 64px; border-radius: 50%;
+    display: grid; place-items: center; color: #fff; font: 300 40px/1 system-ui; text-decoration: none;
+    background: linear-gradient(180deg, #6fd892, #23884a); box-shadow: inset 0 2px 0 rgba(255,255,255,.5), 0 8px 20px rgba(46,168,92,.4); }
+  .empty { text-align: center; padding: 30px 10px; }
+  .empty p { color: var(--muted); }
+  .gone { opacity: .55; }
+  .addcode { display: flex; gap: 8px; margin-top: 18px; }
+  .addcode input { flex: 1; min-width: 0; width: auto; text-transform: uppercase; }
+  .addcode input::placeholder { text-transform: none; }
+  .addcode button { font: 700 15px system-ui; padding: 0 16px; border-radius: 14px; border: 1px solid #c9dfee; background: #fff; }
+  .install { font-size: 14px; color: var(--muted); margin: 16px 6px 90px; }
+</style>
+</head>
+<body>
+<main class="sheet">
+  <div class="top"><img src="/icon-192.png" alt=""><h1>Roundup</h1></div>
+  <div id="list"></div>
+  <form class="addcode" id="add"><input id="code" placeholder="trip code, like BEACH7" maxlength="8" autocapitalize="characters"><button>Add</button></form>
+  <p class="install" id="install"></p>
+</main>
+<a class="newbtn" href="/new" aria-label="New trip">+</a>
+<script>
+  const esc = (s) => String(s ?? "").replace(/[&<>"]/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" }[c]));
+  const KEY = "roundup.trips";
+  const load = () => { try { return JSON.parse(localStorage.getItem(KEY) || "[]"); } catch { return []; } };
+  const save = (list) => { try { localStorage.setItem(KEY, JSON.stringify(list)); } catch {} };
+
+  async function render() {
+    const list = load();
+    const box = document.getElementById("list");
+    if (!list.length) {
+      box.innerHTML = `<section class="card empty"><h2>No trips yet</h2><p>Tap <b>+</b> to plan one. Roundup texts everyone 1:1 so the group chat stays quiet.</p></section>`;
+      return;
+    }
+    const cards = await Promise.all(list.map(async (t) => {
+      let info = null;
+      try { const r = await fetch(`/api/trips/${encodeURIComponent(t.code)}`); if (r.ok) info = await r.json(); } catch {}
+      const title = info?.title ?? t.title, when = info?.dateText ?? t.dateText ?? "";
+      return `<section class="card trip ${info ? "" : "gone"}">
+        <h2>${esc(title)}</h2><p class="when">${esc(when)}${info ? "" : " · not reachable right now"}</p>
+        <div class="row">
+          <a href="/?code=${encodeURIComponent(t.code)}"><span class="ico">📡</span>Live</a>
+          <a href="/t/${encodeURIComponent(t.code)}"><span class="ico">🗺️</span>Plan</a>
+          <button data-share="${esc(t.code)}" data-title="${esc(title)}"><span class="ico">🔗</span>Share</button>
+        </div></section>`;
+    }));
+    box.innerHTML = cards.join("");
+  }
+
+  document.getElementById("list").addEventListener("click", async (e) => {
+    const b = e.target.closest("[data-share]"); if (!b) return;
+    const url = `${location.origin}/j/${b.dataset.share}`;
+    const text = `I'm planning ${b.dataset.title}! tap to join, Roundup (an AI) sorts out the details with you 1:1: ${url}`;
+    if (navigator.share) navigator.share({ text }).catch(() => {});
+    else { try { await navigator.clipboard.writeText(text); b.lastChild.textContent = "Copied"; } catch {} }
+  });
+
+  document.getElementById("add").addEventListener("submit", async (e) => {
+    e.preventDefault();
+    const code = document.getElementById("code").value.trim().toUpperCase(); if (!code) return;
+    const r = await fetch(`/api/trips/${encodeURIComponent(code)}`).catch(() => null);
+    if (!r || !r.ok) { document.getElementById("code").value = ""; document.getElementById("code").placeholder = "no trip with that code"; return; }
+    const info = await r.json();
+    const list = load().filter((t) => t.code !== code);
+    list.unshift({ code, title: info.title, dateText: info.dateText, at: Date.now() });
+    save(list); document.getElementById("code").value = ""; render();
+  });
+
+  const standalone = matchMedia("(display-mode: standalone)").matches || navigator.standalone;
+  document.getElementById("install").textContent = standalone ? "" :
+    /iphone|ipad/i.test(navigator.userAgent) ? "Get the app: tap Share, then Add to Home Screen." : "Get the app: open your browser menu, then Install app / Add to Home screen.";
+  render();
+</script>
+</body>
+</html>

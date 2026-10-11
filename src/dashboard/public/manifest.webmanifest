@@ -1,0 +1,14 @@
+{
+  "name": "Roundup",
+  "short_name": "Roundup",
+  "description": "Plan a group trip by texting everyone 1:1, so the group chat doesn't have to.",
+  "start_url": "/app",
+  "scope": "/",
+  "display": "standalone",
+  "background_color": "#d9f1ff",
+  "theme_color": "#2f9be0",
+  "icons": [
+    { "src": "/icon-192.png", "sizes": "192x192", "type": "image/png" },
+    { "src": "/icon-512.png", "sizes": "512x512", "type": "image/png", "purpose": "any maskable" }
+  ]
+}

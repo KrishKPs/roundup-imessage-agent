@@ -56,14 +56,20 @@ export function startDashboard(opts: DashboardOptions) {
   };
 
   /** The switchboard snapshot (Dashboard.md 4.1). The join QR opens the trip link page (works on the shared pool). */
-  const snapshot = () => {
-    const trip = currentTrip(opts.getState());
+  const snapshot = (code?: string) => {
+    const all = Object.values(opts.getState().trips);
+    const trip = (code && all.find((t) => t.code === code.toUpperCase())) || currentTrip(opts.getState());
     const base = baseUrl();
     const link = trip ? (base && opts.web ? `${base}/j/${trip.code}` : opts.agentNumber ? joinLink(opts.agentNumber, trip.code) : null) : null;
     return toDashboardView(trip, { joinLink: link });
   };
 
   // ---- website: create a trip, and the trip link members open
+  // The installable app's home screen (PWA).
+  app.get("/app", (_req, res) => {
+    res.sendFile(path.join(here, "public", "app.html"));
+  });
+
   app.get("/new", (_req, res) => {
     res.sendFile(path.join(here, "public", "new.html"));
   });
@@ -127,16 +133,18 @@ export function startDashboard(opts: DashboardOptions) {
     }
   });
 
-  app.get("/api/state", (_req, res) => {
-    res.json(snapshot());
+  app.get("/api/state", (req, res) => {
+    res.json(snapshot(typeof req.query.code === "string" ? req.query.code : undefined));
   });
 
-  const clients = new Set<Response>();
+  // Each open board watches one trip: ?code=BEACH7 (the app's "Live" button), or the newest trip.
+  const clients = new Map<Response, string | undefined>();
   app.get("/events", (req, res) => {
+    const code = typeof req.query.code === "string" ? req.query.code : undefined;
     res.set({ "Content-Type": "text/event-stream", "Cache-Control": "no-cache", Connection: "keep-alive" });
     res.flushHeaders();
-    res.write(`event: state\ndata: ${JSON.stringify(snapshot())}\n\n`);
-    clients.add(res);
+    res.write(`event: state\ndata: ${JSON.stringify(snapshot(code))}\n\n`);
+    clients.set(res, code);
     req.on("close", () => clients.delete(res));
   });
 
@@ -176,13 +184,12 @@ export function startDashboard(opts: DashboardOptions) {
     server,
     /** Push the latest view to every open board. */
     broadcast() {
-      const data = `event: state\ndata: ${JSON.stringify(snapshot())}\n\n`;
-      for (const c of clients) c.write(data);
+      for (const [c, code] of clients) c.write(`event: state\ndata: ${JSON.stringify(snapshot(code))}\n\n`);
     },
     /** One dot of animation: a private text went out to / came in from this member. No content. */
     pulse(p: { memberId: string; direction: "in" | "out"; topic: string | null; at: number }) {
       const data = `event: pulse\ndata: ${JSON.stringify(p)}\n\n`;
-      for (const c of clients) c.write(data);
+      for (const c of clients.keys()) c.write(data); // boards ignore members they don't show
     },
   };
 }

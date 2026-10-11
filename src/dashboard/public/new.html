@@ -3,7 +3,16 @@
 <html lang="en">
 <head>
 <meta charset="utf-8">
-<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<link rel="manifest" href="/manifest.webmanifest">
+<meta name="theme-color" content="#2f9be0">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="default">
+<meta name="apple-mobile-web-app-title" content="Roundup">
+<link rel="apple-touch-icon" href="/apple-touch-icon.png">
+<script>if ("serviceWorker" in navigator) addEventListener("load", () => navigator.serviceWorker.register("/sw.js").catch(() => {}));</script>
+
 <title>New trip · Roundup</title>
 <link rel="stylesheet" href="/web.css">
 </head>
@@ -40,6 +49,12 @@
       btn.disabled = false; btn.textContent = "Create trip";
       return;
     }
+    // Remember it on this phone, so it shows up in the app's trip list.
+    try {
+      const list = JSON.parse(localStorage.getItem("roundup.trips") || "[]").filter((t) => t.code !== data.code);
+      list.unshift({ code: data.code, title: body.title, dateText: body.date || null, at: Date.now() });
+      localStorage.setItem("roundup.trips", JSON.stringify(list));
+    } catch {}
     const invite = `${body.name} is planning ${body.title}! tap to join, Roundup (an AI) sorts out the details with you 1:1: ${data.joinUrl}`;
     card.innerHTML = `
       <p class="eyebrow">${esc(body.title)} is ready</p>
@@ -50,7 +65,8 @@
       <div class="linkbox">${esc(data.joinUrl)}</div>
       ${navigator.share ? '<button class="go" id="share" style="margin-top:12px">Share link</button>' : ""}
       <button class="ghost" id="copy">Copy invite</button>
-      <p class="muted" style="margin-top:16px">When everyone's in, text <b>start</b> to Roundup.</p>`;
+      <p class="muted" style="margin-top:16px">When everyone's in, text <b>start</b> to Roundup.</p>
+      <a class="ghost" href="/app" style="text-decoration:none">Go to my trips</a>`;
     document.getElementById("share")?.addEventListener("click", () => navigator.share({ text: invite }).catch(() => undefined));
     document.getElementById("copy").addEventListener("click", async (ev) => {
       try { await navigator.clipboard.writeText(invite); ev.target.textContent = "Copied!"; }

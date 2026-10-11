@@ -4,7 +4,16 @@
 <html lang="en">
 <head>
 <meta charset="utf-8">
-<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<link rel="manifest" href="/manifest.webmanifest">
+<meta name="theme-color" content="#2f9be0">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="default">
+<meta name="apple-mobile-web-app-title" content="Roundup">
+<link rel="apple-touch-icon" href="/apple-touch-icon.png">
+<script>if ("serviceWorker" in navigator) addEventListener("load", () => navigator.serviceWorker.register("/sw.js").catch(() => {}));</script>
+
 <title>Roundup switchboard</title>
 <style>
   :root {
@@ -119,6 +128,24 @@
     .lock { width: 17px; height: 20px; } .budget-line { font-size: 15px; }
     .need .head { font-size: 17px; } .ticker { padding: 7px 14px; font-size: 15px; }
   }
+  /* phones (the app's "Live" view): one scrolling column, switchboard first */
+  .back { display: none; text-decoration: none; font-weight: 800; color: var(--sky-3); font-size: 17px; }
+  @media (max-width: 760px) {
+    html, body { overflow: auto; height: auto; }
+    body { padding-top: env(safe-area-inset-top); }
+    .app { height: auto; grid-template-columns: minmax(0, 1fr); grid-template-rows: none; padding: 10px; gap: 10px; }
+    .card { min-width: 0; } .budget-line { overflow-wrap: anywhere; }
+    header { flex-wrap: wrap; gap: 8px 10px; padding: 10px 14px; }
+    .brand { display: none; } .back { display: inline; }
+    .title { font-size: 20px; } .sub { font-size: 14px; } .chip { font-size: 12px; padding: 4px 9px; }
+    .join, a.plus { display: none; }
+    .center { order: 1; } .left { order: 2; } .right { order: 3; } .ticker { order: 4; white-space: normal; }
+    .center svg#board { height: auto; aspect-ratio: 1 / 1; }
+    .stat .n { font-size: 36px; } .stat.zero .n { font-size: 56px; }
+    .ticker span { display: block; margin: 4px 0; }
+    .demo { display: none !important; }
+    .empty { grid-column: 1; }
+  }
   @media (prefers-reduced-motion: reduce) { .bubble, .orb, .waitring { animation: none; } }
 </style>
 <script src="qrcode.min.js"></script>
@@ -127,7 +154,7 @@
 <div id="bubbles"></div>
 <div class="app" id="app">
   <header class="card">
-    <span class="brand">Roundup</span>
+    <a class="back" href="/app">‹ Trips</a><span class="brand">Roundup</span>
     <span class="title" id="title"></span><span class="sub" id="sub"></span>
     <span class="chip" id="status"></span><span class="chip sim" id="simchip" hidden></span><span class="chip off" id="conn" hidden>reconnecting</span>
     <span class="spacer"></span>
@@ -277,7 +304,7 @@ function countTo(node, value) {
   const from = Number(node.dataset.v || 0); node.dataset.v = value;
   if (reduced || from === value) { node.textContent = value; return; }
   const t0 = performance.now();
-  (function step(t) { if (node.dataset.v != value) return; const k = Math.min(1, (t - t0) / 300); node.textContent = Math.round(from + (value - from) * k); if (k < 1) requestAnimationFrame(step); })(t0);
+  (function step(t) { if (node.dataset.v != value) return; const k = Math.max(0, Math.min(1, (t - t0) / 300)); node.textContent = Math.round(from + (value - from) * k); if (k < 1) requestAnimationFrame(step); })(t0);
   setTimeout(() => { if (node.dataset.v == value) node.textContent = value; }, 350); // always land on the real number
 }
 
@@ -369,7 +396,8 @@ function render(v) {
 }
 
 // ---------------------------------------------------------------- live connection
-const es = new EventSource("/events");
+const code = new URLSearchParams(location.search).get("code");
+const es = new EventSource(code ? `/events?code=${encodeURIComponent(code)}` : "/events");
 es.addEventListener("state", (e) => { document.getElementById("conn").hidden = true; view = JSON.parse(e.data); render(view); });
 es.addEventListener("pulse", (e) => onPulse(JSON.parse(e.data)));
 es.onerror = () => { document.getElementById("conn").hidden = false; };
