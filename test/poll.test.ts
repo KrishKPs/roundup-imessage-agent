@@ -19,7 +19,7 @@ describe("organizer asks everyone", () => {
   it("asks each member privately, then sends the organizer one tally", async () => {
     const { h, org, sam, maya, leo } = await campTrip();
     await h.say(org, "Ask everyone does 10am Saturday works ??");
-    expect(h.transport.to(org)).toEqual(["on it, asking Sam, Maya, Leo now. i'll text you once everyone answers."]);
+    expect(h.transport.to(org)).toEqual(["on it, asking Sam, Maya, Leo. i'll text you once everyone answers."]);
     for (const p of [sam, maya, leo]) expect(h.transport.to(p)).toEqual(["Krish wanted to ask you: does 10am Saturday works?"]);
 
     await h.say(sam, "yes");
@@ -65,12 +65,66 @@ describe("organizer asks everyone", () => {
     expect(h.transport.to(org).at(-1)).toBe('"which days between saturday and tuesday are you free, and what times work best?" Sam: sat after 2 or sunday all day; Maya: only sunday; Leo: sunday morning');
   });
 
-  it("a new question replaces an unanswered old one right away", async () => {
+  it("a second question waits its turn, and both get answered and reported", async () => {
     const { h, org, sam } = await campTrip();
     await h.say(org, "ask everyone does 10am saturday work");
     await h.say(org, "ask everyone what can you bring");
+    expect(h.transport.to(sam)).toEqual(["Krish wanted to ask you: does 10am saturday work?"]); // one question at a time
+    await h.say(sam, "yep");
     expect(h.transport.to(sam).at(-1)).toBe("Krish wanted to ask you: what can you bring?");
     await h.say(sam, "a tent and snacks");
-    expect(h.trip().poll!.answers[sam]).toBe("a tent and snacks");
+    const [first, second] = h.trip().polls!;
+    expect([first.answers[sam], second.answers[sam]]).toEqual(["yep", "a tent and snacks"]);
+  });
+
+  it("ask just Sam: only Sam is asked, and the organizer hears back what Sam said", async () => {
+    const { h, org, sam, maya, leo } = await campTrip();
+    await h.say(org, "ask sam if he can bring the tent");
+    expect(h.transport.to(org)).toEqual(["on it, asking Sam. i'll let you know what Sam says."]);
+    expect(h.transport.to(sam)).toEqual(["Krish wanted to ask you: can you bring the tent?"]);
+    expect(h.transport.to(maya)).toHaveLength(0);
+    expect(h.transport.to(leo)).toHaveLength(0);
+    await h.say(sam, "yeah i got one");
+    expect(h.transport.to(org).at(-1)).toBe('"can you bring the tent?" Sam: yeah i got one');
+  });
+
+  it("ask two people: one summary once both answer; a typo in a name still finds them", async () => {
+    const { h, org, sam, maya, leo } = await campTrip();
+    await h.say(org, "ask Sam and Myaa what time they get off work");
+    expect(h.transport.to(org)).toEqual(["on it, asking Sam and Maya. i'll text you once they've both answered."]);
+    expect(h.transport.to(maya)).toEqual(["Krish wanted to ask you: what time you get off work?"]);
+    expect(h.transport.to(leo)).toHaveLength(0);
+    await h.say(sam, "5ish");
+    expect(h.transport.to(org)).toHaveLength(1);
+    await h.say(maya, "around 6");
+    expect(h.transport.to(org).at(-1)).toBe('"what time you get off work?" Sam: 5ish; Maya: around 6');
+  });
+
+  it("tell just Leo: only Leo gets the note", async () => {
+    const { h, org, sam, leo } = await campTrip();
+    await h.say(org, "tell Leo to bring the speaker");
+    expect(h.transport.to(leo)).toEqual(["from Krish: bring the speaker"]);
+    expect(h.transport.to(sam)).toHaveLength(0);
+    expect(h.transport.to(org)).toEqual(["sent to Leo."]);
+  });
+
+  it("a group question keeps going while a 1:1 question is asked", async () => {
+    const { h, org, sam, maya } = await campTrip();
+    await h.say(org, "ask everyone which day works");
+    await h.say(org, "ask Maya if she can drive");
+    await h.say(sam, "sunday");
+    await h.say(maya, "sunday too");
+    expect(h.transport.to(maya).at(-1)).toBe("Krish wanted to ask you: can you drive?");
+    await h.say(maya, "yes i can");
+    expect(h.transport.to(org).join(" | ")).toContain('"can you drive?" Maya: yes i can');
+    expect(h.trip().polls!.map((p) => p.reported)).toEqual([false, true]); // Leo hasn't answered the group one
+  });
+
+  it("notes are written to the person: 'he's on speaker duty' -> 'you're on speaker duty'", async () => {
+    const { h, org, leo, maya } = await campTrip();
+    await h.say(org, "let leo know hes on speaker duty");
+    expect(h.transport.to(leo)).toEqual(["from Krish: you're on speaker duty"]);
+    await h.say(org, "tell everyone they need to bring their own water");
+    expect(h.transport.to(maya)).toEqual(["from Krish: you need to bring your own water"]);
   });
 });

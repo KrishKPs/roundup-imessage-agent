@@ -2,6 +2,7 @@
 import type { Ask, AskTopic, Member, MessageIntent, Trip } from "../types.js";
 import { newId } from "../util.js";
 import { type Ctx, isGoing, organizerName } from "./context.js";
+import { findPoll } from "./poll.js";
 
 /** A member who got 2 questions/nudges with no reply is not sent more until they reply. */
 export const MAX_UNANSWERED = 2;
@@ -49,7 +50,10 @@ export function cancelAsksFor(ctx: Ctx, trip: Trip, m: Member, needId: string): 
 function stillRelevant(trip: Trip, m: Member, ask: Ask): boolean {
   if (ask.topic === "rsvp") return m.rsvp === "unknown";
   if (ask.topic === "budget") return isGoing(m) && m.budgetCap === null;
-  if (ask.topic === "poll") return trip.poll?.id === ask.pollId && !(m.phone in trip.poll!.answers);
+  if (ask.topic === "poll") {
+    const poll = findPoll(trip, ask.pollId);
+    return !!poll && !poll.reported && !(m.phone in poll.answers);
+  }
   if (ask.needId) {
     const need = trip.needs.find((n) => n.id === ask.needId);
     return !!need && need.status !== "filled" && need.waitingOn === m.phone;
@@ -70,7 +74,7 @@ export function askIntent(trip: Trip, m: Member, ask: Ask): MessageIntent {
     case "drive": return { kind: "ask_drive", name: m.name, trip: trip.title };
     case "seats": return { kind: "ask_seats", name: m.name };
     case "item": return { kind: "ask_item", name: m.name, item: need?.label ?? "something", trip: trip.title };
-    case "poll": return { kind: "ask_poll", organizer: organizerName(trip), question: trip.poll?.question ?? "does the plan work for you?", open: !!trip.poll?.open };
+    case "poll": return { kind: "ask_poll", organizer: organizerName(trip), question: findPoll(trip, ask.pollId)?.question ?? "does the plan work for you?", open: true };
   }
 }
 

@@ -5,7 +5,7 @@ import { enqueueAsk } from "./asks.js";
 import { newNeed, releaseCommitments } from "./chain.js";
 import { type Ctx, goingMembers, organizerName, seatsNeed } from "./context.js";
 import { budgetAnsweredCount, finalize } from "./plan.js";
-import { announce, parseAnnouncement, parsePollRequest, pollSummary, startPoll } from "./poll.js";
+import { announce, cleanNote, latestPoll, parseAnnouncement, parseDirected, pollSummary, startPoll, toYou } from "./poll.js";
 import { findJoinCode, organizerVerb, parsePeople, parseTripRequest, textAfterCode } from "./intents.js";
 
 export function newMember(phone: Phone, name: string, now: number): Member {
@@ -96,18 +96,30 @@ export function handleCommand(env: CommandEnv, phone: Phone, text: string): bool
     return true;
   }
 
-  const note = trip?.members[phone] ? parseAnnouncement(t) : null;
-  if (note && trip) {
-    if (!isOrganizer) ctx.out(phone, { kind: "not_organizer", organizer: organizerName(trip) });
-    else announce(ctx, trip, note);
-    return true;
-  }
-
-  const pollQuestion = trip?.members[phone] ? parsePollRequest(t) : null;
-  if (pollQuestion && trip) {
-    if (!isOrganizer) ctx.out(phone, { kind: "not_organizer", organizer: organizerName(trip) });
-    else startPoll(ctx, trip, pollQuestion);
-    return true;
+  // "tell everyone/Leo ...", "ask everyone/Sam and Maya ...": the organizer talking to the group or to people.
+  if (trip?.members[phone]) {
+    const tell = parseDirected(trip, t, /tell|remind|let/);
+    const ask = tell ? null : parseDirected(trip, t, /ask|check with|poll/);
+    const announcement = parseAnnouncement(t);
+    if (tell || ask || announcement) {
+      if (!isOrganizer) {
+        ctx.out(phone, { kind: "not_organizer", organizer: organizerName(trip) });
+        return true;
+      }
+      if (tell && cleanNote(tell.rest).length >= 3) {
+        announce(ctx, trip, cleanNote(tell.rest), tell.target);
+        return true;
+      }
+      if (announcement) {
+        announce(ctx, trip, announcement);
+        return true;
+      }
+      const question = ask ? toYou(ask.rest) : "";
+      if (ask && question) {
+        startPoll(ctx, trip, question, ask.target);
+        return true;
+      }
+    }
   }
 
   const verb = organizerVerb(t);
@@ -240,7 +252,8 @@ export function statusText(trip: Trip): string {
   for (const n of trip.needs.filter((x) => x.kind === "item")) parts.push(`${n.label} ${n.status === "filled" ? "covered" : "open"}`);
   const b = budgetAnsweredCount(trip);
   parts.push(`budget ${b.answered}/${b.total} answered`);
-  const poll = trip.poll ? ` ${pollSummary(trip)}` : "";
+  const last = latestPoll(trip);
+  const poll = last ? ` ${pollSummary(trip, last)}` : "";
   return `${parts.join(", ")}.${poll}`;
 }
 

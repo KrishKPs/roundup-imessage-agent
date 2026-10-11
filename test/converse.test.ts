@@ -49,8 +49,8 @@ async function setup() {
 describe("talking like a person", () => {
   it("organizer in plain English: a question for the group becomes a 1:1 poll", async () => {
     const { transport, org, sam, maya, say } = await setup();
-    await say(org, "does 10am saturday work for everyone?", { action: "ask_everyone", question: "does 10am saturday work for you?" });
-    expect(transport.to(org)).toEqual(["on it, asking Sam, Maya now. i'll text you once everyone answers."]);
+    await say(org, "does 10am saturday work for everyone?", { action: "ask_everyone", question: "does 10am saturday work for you?", to: null });
+    expect(transport.to(org)).toEqual(["on it, asking Sam and Maya. i'll text you once everyone answers."]);
     expect(transport.to(sam)[0]).toMatch(/Krish wanted to ask you: does 10am saturday work for you\?/);
     expect(transport.to(maya)).toHaveLength(1);
   });
@@ -123,5 +123,15 @@ describe("talking like a person", () => {
     const i = { kind: "ask_rsvp", name: "Sam", trip: "CAMP", date: "sunday" } as const;
     expect(isSafeRewrite("you in for CAMP on sunday?", `Krish wants to know if you're down for CAMP sunday wait, need "Krish" capitalized. Krish wants to know if you're down`, i)).toBe(false);
     expect(isSafeRewrite("you in for CAMP on sunday?", "Krish is kicking things off, you down for CAMP sunday?", i)).toBe(true);
+  });
+
+  it("organizer in plain English to one person: only that person is asked; unknown names get a question back", async () => {
+    const { transport, org, sam, maya, say } = await setup();
+    await say(org, "can u check if sammy can bring the tent", { action: "ask_everyone", question: "can you bring the tent?", to: ["sammy"] });
+    expect(transport.to(sam)).toEqual(["Krish wanted to ask you: can you bring the tent?"]);
+    expect(transport.to(maya)).toHaveLength(0);
+    await say(org, "tell jake to bring chairs", { action: "tell_everyone", message: "bring chairs", to: ["Jake"] });
+    expect(transport.to(org).at(-1)).toBe("who's Jake? i don't see them in CAMP. try the name they joined with.");
+    expect(transport.to(maya)).toHaveLength(0);
   });
 });

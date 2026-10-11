@@ -21,7 +21,7 @@ import {
 import { type Ctx, type EngineConfig, isGoing, organizerName, seatsNeed } from "./context.js";
 import { finalize } from "./plan.js";
 import { type SeedInput, buildDemoTrip } from "./seed.js";
-import { announce, recordPollAnswer, startPoll } from "./poll.js";
+import { announce, cleanNote, findPoll, recordPollAnswer, resolveNames, startPoll } from "./poll.js";
 import { checkSilence } from "./timers.js";
 
 export interface EngineDeps {
@@ -186,11 +186,11 @@ export class Engine {
       switch (res.action) {
         case "ask_everyone":
           if (!res.question) break;
-          startPoll(ctx, trip, `${res.question.trim().replace(/[?!.\s]+$/, "")}?`, res.open ?? undefined);
+          startPoll(ctx, trip, `${res.question.trim().replace(/[?!.\s]+$/, "")}?`, resolveNames(trip, res.to));
           return true;
         case "tell_everyone":
           if (!res.message) break;
-          announce(ctx, trip, res.message.trim());
+          announce(ctx, trip, cleanNote(res.message), resolveNames(trip, res.to));
           return true;
         case "status": return handleCommand(env, m.phone, "status");
         case "start": return handleCommand(env, m.phone, "start");
@@ -289,7 +289,7 @@ export class Engine {
     }
 
     // An open question from the organizer ("which days are you free?"): their words are the answer.
-    if (ask?.topic === "poll" && trip.poll?.open && ask.pollId === trip.poll.id && !/\?\s*$/.test(text)
+    if (ask?.topic === "poll" && findPoll(trip, ask.pollId) && !/\?\s*$/.test(text)
         && !/\b(can'?t (come|make it) anymore|not (coming|going) anymore|i'?m out\b|drop(ping)? out|have to bail|gotta bail)/i.test(text)) {
       recordPollAnswer(this.ctx, trip, m, ask, text);
       if (!isStale) resolvePending(this.ctx, trip, m);

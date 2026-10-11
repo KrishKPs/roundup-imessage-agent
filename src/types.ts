@@ -14,7 +14,8 @@ export interface Trip {
   log: LogEvent[];
   createdAt: number;
   startedAt: number | null; // addition: when `start` was sent (drives the seats-chain timeout)
-  poll?: Poll | null; // addition: the organizer's latest "ask everyone ..." question
+  poll?: Poll | null; // older saves: a single question (moved into `polls` on load)
+  polls?: Poll[]; // addition: the organizer's questions ("ask everyone ...", "ask Sam ..."), oldest first
 }
 
 /** "ask everyone does 10am saturday work?": asked 1:1, tallied, reported back to the organizer. */

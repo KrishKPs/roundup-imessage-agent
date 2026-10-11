@@ -2,7 +2,7 @@
 // Never another member's budget, never anyone's phone number. The AI may only say what is in here.
 import type { Member, Trip } from "../types.js";
 import { type Ctx, byJoin, nameOf, seatsNeed } from "./context.js";
-import { pollResults } from "./poll.js";
+import { pollResults, polls } from "./poll.js";
 import { assignSeats, budgetAnsweredCount, groupBudget } from "./plan.js";
 
 const names = (ms: Member[]) => ms.map((m) => m.name || "someone").join(", ") || "nobody";
@@ -46,10 +46,11 @@ export function factsFor(trip: Trip, me: Member, _ctx: Ctx): string {
   lines.push(own.join("; "));
 
   if (isOrganizer) {
-    if (trip.poll) {
-      // The organizer asked for these answers, so they (and only they) may see them, to find a common option.
-      const { answers, silent } = pollResults(trip);
-      lines.push(`your last question to everyone: "${trip.poll.question}"`);
+    // The organizer asked for these answers, so they (and only they) may see them, e.g. to find a common time.
+    for (const poll of polls(trip).slice(-3)) {
+      const { answers, silent } = pollResults(trip, poll);
+      const to = poll.asked.length === 1 ? trip.members[poll.asked[0]]?.name ?? "someone" : "the group";
+      lines.push(`your question to ${to}: "${poll.question}"`);
       for (const a of answers) lines.push(`  ${a.name} answered: ${a.answer}`);
       if (silent.length) lines.push(`  no answer yet from: ${silent.join(", ")}`);
     }

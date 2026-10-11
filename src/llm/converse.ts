@@ -25,7 +25,8 @@ const memberActions = ["reply", "pass_to_organizer", "tell_organizer"] as const;
 const schema = z.object({
   action: z.enum([...organizerActions, ...memberActions]),
   question: z.string().max(160).nullable().optional(), // ask_everyone
-  open: z.boolean().nullable().optional(), // ask_everyone: true = free-text answers, false = yes/no
+  open: z.boolean().nullable().optional(), // unused now (every question is open); tolerated if the model sends it
+  to: z.array(z.string().max(30)).max(20).nullable().optional(), // ask_everyone / tell_everyone: just these people (null = everyone)
   items: z.array(z.string().max(30)).max(6).nullable().optional(), // add_items
   message: z.string().max(200).nullable().optional(), // tell_everyone
   note: z.string().max(160).nullable().optional(), // pass_to_organizer / tell_organizer: short summary for the organizer
@@ -42,8 +43,8 @@ function prompt(i: ConverseInput): string {
     : "(no earlier messages)";
   const actions = i.role === "organizer"
     ? `- "reply": just answer or chat (questions about the trip, thanks, small talk). If they ask about the answers to their question (e.g. "what time works for everyone?"), work it out from the answers in TRIP FACTS: give the option that fits the most people and who it doesn't work for.
-- "ask_everyone": they want a NEW question put to every member (works anytime, even before start). Put the question, phrased to the members, in "question" (e.g. "does 10am saturday work?" or "which days between sat and tue are you free, and what times?"). Set "open": true if it needs a free-text answer (days, times, what to bring), false if yes/no. Don't re-ask a question that's already been answered; use "reply" with the answers instead.
-- "tell_everyone": they want an announcement sent to every member (no answer needed). Put it in "message", in their voice, cleaned up (e.g. "bring sunscreen and a towel!").
+- "ask_everyone": they want a NEW question asked (works anytime, even before start). Put the question, written TO the person being asked, in "question" (e.g. "does 10am saturday work for you?", "can you bring the tent?"). If they named specific people ("ask Sam...", "check with Maya and Leo..."), put just those first names in "to"; otherwise "to" is null (everyone). Don't re-ask a question that's already been answered; use "reply" with the answers instead.
+- "tell_everyone": they want a note sent (no answer needed). Put it in "message", in their voice, cleaned up (e.g. "bring sunscreen and a towel!"). If they named specific people ("tell Leo..."), put just those first names in "to"; otherwise "to" is null (everyone).
 - "status": they want an update on who's in / what's left.
 - "start": they say everyone's in and want to kick things off.
 - "send_plans": they want to wrap up and send everyone their plans now.
@@ -71,7 +72,7 @@ ${actions}
 Reply style: like a friend texting. lowercase ok. 1-2 short sentences, under 200 characters. at most one emoji, usually none.
 Hard rules: never invent details that aren't in TRIP FACTS (no times, places, prices, names). never reveal anyone's budget except their own. never say you'll do something not in the action list. don't ask them questions (the app asks its own questions at the right time); just answer or acknowledge. don't repeat your last message, and don't greet them again mid-conversation. output only the final text, never notes about it.
 
-Return JSON only: {"action": string, "question": string|null, "open": boolean|null, "items": string[]|null, "date": string|null, "message": string|null, "note": string|null, "reply": string|null}`;
+Return JSON only: {"action": string, "question": string|null, "to": string[]|null, "items": string[]|null, "date": string|null, "message": string|null, "note": string|null, "reply": string|null}`;
 }
 
 export function makeConverser(llm: Llm | null): Converser | undefined {

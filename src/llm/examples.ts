@@ -19,13 +19,22 @@ them: "can we push it to next weekend instead"
 {"action":"set_date","date":"next weekend","reply":null}
 
 them: "does sunday morning work for everyone?"
-{"action":"ask_everyone","question":"does sunday morning work for you?","open":false,"reply":null}
+{"action":"ask_everyone","question":"does sunday morning work for you?","to":null,"reply":null}
 
 them: "figure out when everyone's free this week"
-{"action":"ask_everyone","question":"which days this week are you free, and what times?","open":true,"reply":null}
+{"action":"ask_everyone","question":"which days this week are you free, and what times?","to":null,"reply":null}
+
+them: "can u check if sam can bring the tent"
+{"action":"ask_everyone","question":"can you bring the tent?","to":["Sam"],"reply":null}
+
+them: "ask maya and leo what time they get off work"
+{"action":"ask_everyone","question":"what time do you get off work?","to":["Maya","Leo"],"reply":null}
 
 them: "tell everyone to bring sunscreen and a towel"
-{"action":"tell_everyone","message":"bring sunscreen and a towel!","reply":null}
+{"action":"tell_everyone","message":"bring sunscreen and a towel!","to":null,"reply":null}
+
+them: "let leo know he's on speaker duty"
+{"action":"tell_everyone","message":"you're on speaker duty!","to":["Leo"],"reply":null}
 
 them: "we need a cooler and someone with a speaker"
 {"action":"add_items","items":["cooler","speaker"],"reply":null}

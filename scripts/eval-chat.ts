@@ -55,9 +55,18 @@ const CASES: Case[] = [
   // organizer: plain-English requests become the right action
   { name: "org asks who's coming", from: "Krish", text: "whos coming so far", check: (r) => has(r, /Sam/, "didn't name anyone") },
   { name: "org pushes date", from: "Krish", text: "can we push it to next weekend instead", check: (r) => (/next weekend/i.test(r.trip.dateText ?? "") ? null : `date is ${r.trip.dateText}`) },
-  { name: "org poll", from: "Krish", text: "does sunday morning work for everyone?", check: (r) => (r.trip.poll ? null : "no question sent") },
-  { name: "org open poll", from: "Krish", text: "figure out when everyone's free this week", check: (r) => (r.trip.poll?.open ? null : "no open poll started") },
-  { name: "org open poll not suffixed", from: "Krish", text: "ask everyone what snacks they want", check: (r) => (r.others.Sam?.some((t) => /yes, no, or maybe/i.test(t)) ? "open question got yes/no/maybe" : r.trip.poll ? null : "no poll") },
+  { name: "org poll", from: "Krish", text: "does sunday morning work for everyone?", check: (r) => (r.trip.polls?.length ? null : "no question sent") },
+  { name: "org open poll", from: "Krish", text: "figure out when everyone's free this week", check: (r) => (r.trip.polls?.length ? null : "no question sent") },
+  { name: "org open poll not suffixed", from: "Krish", text: "ask everyone what snacks they want", check: (r) => (r.others.Sam?.some((t) => /yes, no, or maybe/i.test(t)) ? "open question got yes/no/maybe" : r.trip.polls?.length ? null : "no poll") },
+  // organizer: just one or a few people
+  { name: "org asks just Sam", from: "Krish", text: "can u check if sam can bring the tent",
+    check: (r) => first(r.others.Sam?.some((t) => /tent/i.test(t)) ? null : "Sam wasn't asked", r.others.Maya || r.others.Leo ? "others were asked too" : null) },
+  { name: "org asks two people", from: "Krish", text: "ask maya and leo what time they get off work",
+    check: (r) => first(r.others.Maya?.length && r.others.Leo?.length ? null : "Maya and Leo not both asked", r.others.Sam ? "Sam was asked too" : null) },
+  { name: "org tells just Leo", from: "Krish", text: "let leo know hes on speaker duty",
+    check: (r) => first(r.others.Leo?.some((t) => /speaker/i.test(t)) ? null : "Leo didn't get it", r.others.Sam || r.others.Maya ? "others got it too" : null) },
+  { name: "org names unknown person", from: "Krish", text: "ask jake if he's coming",
+    check: (r) => first(has(r, /Jake/i, "didn't ask who Jake is"), nobodyElse(r)) },
   { name: "org announcement", from: "Krish", text: "tell everyone to bring sunscreen", check: (r) => (r.others.Sam?.some((t) => /sunscreen/i.test(t)) ? null : "Sam didn't get the note") },
   { name: "org adds items", from: "Krish", text: "we need a cooler and a speaker", check: (r) => (r.trip.needs.some((n) => n.label.includes("cooler")) ? null : "cooler not added") },
   { name: "org kicks off", from: "Krish", text: "ok everyone's here, let's goooo", check: (r) => (r.trip.status !== "collecting_members" ? null : "trip not started") },
@@ -65,13 +74,13 @@ const CASES: Case[] = [
   { name: "org cancel (unsupported)", from: "Krish", text: "cancel the whole thing", check: (r) => first(lacks(r, /\b(cancel+ed|done, it's cancel)/i, "claimed it cancelled"), nobodyElse(r)) },
   { name: "org small talk", from: "Krish", text: "lol this is gonna be so fun", check: (r) => (r.replies.length === 1 ? null : `${r.replies.length} replies`) },
   { name: "org common time", from: "Krish", text: "so what day works for everyone",
-    setup: (t) => { t.poll = { id: "p1", question: "which days are you free?", open: true, askedAt: 0, asked: [P.Sam, P.Maya, P.Leo], answers: { [P.Sam]: "sat or sun", [P.Maya]: "only sunday", [P.Leo]: "sunday after 12" }, reported: true }; },
+    setup: (t) => { t.polls = [{ id: "p1", question: "which days are you free?", open: true, askedAt: 0, asked: [P.Sam, P.Maya, P.Leo], answers: { [P.Sam]: "sat or sun", [P.Maya]: "only sunday", [P.Leo]: "sunday after 12" }, reported: true }]; },
     check: (r) => has(r, /sun/i, "didn't pick sunday") },
   { name: "org status reads like a text", from: "Krish", text: "status", started: true, check: (r) => lacks(r, /\d+\/\d+/, "stats-style x/y numbers") },
   { name: "poll answer gets a real reaction", from: "Sam", text: "sat works but i have work till 3",
-    setup: (t) => { t.poll = { id: "p2", question: "which days this weekend work for you?", open: true, askedAt: 0, asked: [P.Sam, P.Maya, P.Leo], answers: {}, reported: false };
+    setup: (t) => { t.polls = [{ id: "p2", question: "which days this weekend work for you?", open: true, askedAt: 0, asked: [P.Sam, P.Maya, P.Leo], answers: {}, reported: false }];
       t.members[P.Sam].pendingAsk = { id: "a2", topic: "poll", needId: null, pollId: "p2", askedAt: 1, nudged: false }; },
-    check: (r) => first(r.trip.poll?.answers[P.Sam] ? null : "answer not saved", has(r, /3|sat/i, "didn't react to what they said")) },
+    check: (r) => first(r.trip.polls?.[0]?.answers[P.Sam] ? null : "answer not saved", has(r, /3|sat/i, "didn't react to what they said")) },
   // members: answered from facts, or passed to the organizer, never invented
   { name: "member who's going", from: "Sam", text: "who else is going", check: (r) => has(r, /Maya|Leo|Krish/, "didn't name anyone") },
   { name: "member date", from: "Sam", text: "wait when is it again", check: (r) => has(r, /saturday/i, "didn't say saturday") },
