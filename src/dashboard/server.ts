@@ -89,7 +89,7 @@ export function startDashboard(opts: DashboardOptions) {
   });
 
   app.post("/api/trips", async (req, res) => {
-    if (!opts.web) return res.status(404).end();
+    if (!opts.web) return res.status(404).json({ error: "This is the offline preview, so it can't create real trips. Start the real bot with npm run dev and use its link." });
     const title = clean(req.body?.title, 60);
     const name = clean(req.body?.name, 30);
     const phone = webPhone(req.body?.phone);
@@ -110,7 +110,7 @@ export function startDashboard(opts: DashboardOptions) {
   });
 
   app.post("/api/trips/:code/join", async (req, res) => {
-    if (!opts.web) return res.status(404).end();
+    if (!opts.web) return res.status(404).json({ error: "This is the offline preview, so it can't add real people. Use the real bot's link." });
     const code = clean(req.params.code, 10).toUpperCase();
     const name = clean(req.body?.name, 30);
     const phone = webPhone(req.body?.phone);
