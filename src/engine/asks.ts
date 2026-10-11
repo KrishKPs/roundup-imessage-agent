@@ -9,6 +9,7 @@ export const MAX_UNANSWERED = 2;
 
 export function enqueueAsk(ctx: Ctx, trip: Trip, m: Member, topic: AskTopic, needId: string | null = null, pollId?: string): void {
   if (m.optedOut) return;
+  if (topic === "budget" && trip.settings?.budget === false) return; // organizer turned budgets off
   const ask: Ask = { id: newId("ask"), topic, needId, askedAt: 0, nudged: false, ...(pollId ? { pollId } : {}) };
   m.askQueue.push(ask);
   sendNextQueued(ctx, trip, m);

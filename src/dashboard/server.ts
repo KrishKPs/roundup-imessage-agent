@@ -3,6 +3,9 @@
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 import express from "express";
+import { z } from "zod";
+import { template } from "../llm/phrase.js";
+import type { WebTripInput } from "../engine/commands.js";
 import type { Request, Response } from "express";
 import { currentTrip, toDashboardView } from "./view.js";
 import { tripPage } from "../engine/itinerary.js";
@@ -19,7 +22,7 @@ export interface DashboardOptions {
   onDemo?: (action: string, body: Record<string, unknown>) => Promise<unknown>;
   /** Website "+" and trip links. */
   web?: {
-    createTrip: (input: { title: string; dateText: string | null; name: string; phone: string }) => Promise<string>;
+    createTrip: (input: WebTripInput) => Promise<string>;
     join: (code: string, person: { name: string; phone: string }) => Promise<string | null>;
     /** Register the number with Photon; returns the bot number they should text. */
     prepare: (phone: string) => Promise<string | undefined>;
@@ -38,6 +41,35 @@ const viaTunnel = (req: Request) => {
   if (ADMIN_KEY && req.get("x-admin-key") === ADMIN_KEY) return false;
   return !!req.get("cf-connecting-ip") || !!req.get("fly-client-ip") || !isLoopback(req.socket.remoteAddress);
 };
+
+/** One text field from the form: whitespace collapsed, trimmed. */
+const text = (max: number, msg: string) => z.string().transform((v) => v.replace(/\s+/g, " ").trim()).pipe(z.string().max(max, msg));
+const optionalText = (max: number) => z.string().optional().default("").transform((v) => v.replace(/\s+/g, " ").trim().slice(0, max));
+
+/** Create-trip form (validated here too, not just in the browser). */
+const createSchema = z.object({
+  title: text(40, "keep the trip name under 40 characters").pipe(z.string().min(1, "add a trip name")),
+  date: text(40, "keep the day under 40 characters").pipe(z.string().min(1, "add a day")),
+  name: text(20, "keep your first name under 20 characters").pipe(z.string().min(1, "add your first name")),
+  phone: z.string().transform((v, ctx) => {
+    const p = webPhone(v);
+    if (!p) ctx.addIssue({ code: "custom", message: "that doesn't look like a phone number" });
+    return p ?? "";
+  }),
+  facts: z.object({
+    where: optionalText(60), leaveAt: optionalText(20), meetAt: optionalText(60), backBy: optionalText(20), notes: optionalText(200),
+  }).optional().default({ where: "", leaveAt: "", meetAt: "", backBy: "", notes: "" }),
+  rides: z.boolean().optional().default(true),
+  budget: z.boolean().optional().default(true),
+  items: z.array(z.string().transform((v) => v.replace(/\s+/g, " ").trim().toLowerCase()).pipe(z.string().min(1).max(20, "keep each item under 20 characters")))
+    .max(8, "pick up to 8 things").optional().default([]),
+});
+
+const previewSchema = z.object({
+  title: optionalText(40), date: optionalText(40), name: optionalText(20),
+  rides: z.boolean().optional().default(true), budget: z.boolean().optional().default(true),
+  items: z.array(z.string().max(20)).max(8).optional().default([]),
+});
 
 const clean = (v: unknown, max: number) => String(v ?? "").replace(/\s+/g, " ").trim().slice(0, max);
 
@@ -102,14 +134,43 @@ export function startDashboard(opts: DashboardOptions) {
     res.json({ title: trip.title, dateText: trip.dateText, organizer: trip.members[trip.organizer]?.name || "your friend" });
   });
 
+  // What the create page needs to know (demo helpers, and whether one shared number exists for "text join CODE").
+  app.get("/api/config", (_req, res) => {
+    res.json({ demoMode: opts.demoMode, joinByText: !!(opts.agentNumber && process.env.DEDICATED_LINE === "true"), agentNumber: opts.agentNumber || null });
+  });
+
+  // The exact first texts a member gets, built from the bot's own templates (create page live preview).
+  app.post("/api/preview", (req, res) => {
+    const p = previewSchema.safeParse(req.body ?? {});
+    if (!p.success) return res.status(400).json({ error: "bad preview input" });
+    const { title, date, name, rides, budget, items } = p.data;
+    const trip = title || "the trip", org = name || "the organizer";
+    const msgs = [
+      { text: template({ kind: "intro", name: "there", trip, organizer: org }), next: false },
+      { text: template({ kind: "waiting_for_start", organizer: org, trip }), next: false },
+    ];
+    if (budget) msgs.push({ text: "then: budget 🔒", next: true });
+    if (rides) msgs.push({ text: "then: rides", next: true });
+    for (const it of items) msgs.push({ text: `then: who has a ${it}`, next: true });
+    res.json({ messages: msgs, date: date || null });
+  });
+
   app.post("/api/trips", async (req, res) => {
     if (!opts.web) return res.status(404).json({ error: "This is the offline preview, so it can't create real trips. Start the real bot with npm run dev and use its link." });
-    const title = clean(req.body?.title, 60);
-    const name = clean(req.body?.name, 30);
-    const phone = webPhone(req.body?.phone);
-    if (!title || !name || !phone) return res.status(400).json({ error: "Fill in the trip name, your name, and your phone number." });
+    const parsed = createSchema.safeParse(req.body ?? {});
+    if (!parsed.success) {
+      // Field-level messages in plain words, shown under each field. Never echo the phone number back.
+      const errors: Record<string, string> = {};
+      for (const issue of parsed.error.issues) errors[String(issue.path[0] ?? "form")] ??= issue.message;
+      return res.status(400).json({ error: "Check the highlighted fields.", errors });
+    }
+    const b = parsed.data;
+    const title = b.title, name = b.name, phone = b.phone;
     try {
-      const code = await opts.web.createTrip({ title, dateText: clean(req.body?.date, 40) || null, name, phone });
+      const code = await opts.web.createTrip({
+        title, dateText: b.date, name, phone,
+        facts: b.facts, settings: { rides: b.rides, budget: b.budget }, items: b.items,
+      });
       const line = await opts.web.prepare(phone);
       if (!line) return res.status(502).json({ error: "Couldn't set up your number with iMessage. Try again in a moment." });
       res.json({

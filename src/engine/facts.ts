@@ -14,6 +14,11 @@ export function factsFor(trip: Trip, me: Member, ctx: Ctx): string {
     `trip: ${trip.title}`,
     `date: ${trip.dateText ?? "not set yet"}`,
     `place: ${trip.place ?? "not set yet"}`,
+    `where: ${trip.facts?.where || trip.place || "not set (say you'll check with the organizer)"}`,
+    `leaving at: ${trip.facts?.leaveAt || "not set (say you'll check with the organizer)"}`,
+    `meeting spot: ${trip.facts?.meetAt || "not set (say you'll check with the organizer)"}`,
+    `back by: ${trip.facts?.backBy || "not set (say you'll check with the organizer)"}`,
+    ...(trip.facts?.notes ? [`organizer's notes for everyone: ${trip.facts.notes}`] : []),
     `trip page (share this link when asked for the link/plan page): ${ctx.cfg.tripLink?.(trip.code) ?? "not available"}`,
     `organizer: ${nameOf(trip, trip.organizer)}`,
     `stage: ${trip.status === "collecting_members" ? "people are still joining; the rsvp/budget/ride questions go out when the organizer texts start (the organizer can ask everyone something anytime)" : trip.status === "coordinating" ? "sorting out who's in, rides, and what to bring" : "plans have been sent"}`,
@@ -63,4 +68,31 @@ export function factsFor(trip: Trip, me: Member, ctx: Ctx): string {
     if (notIn.length) lines.push(`signed up but haven't texted in yet: ${names(notIn)}`);
   }
   return lines.join("\n");
+}
+
+/**
+ * Questions the organizer's own details answer exactly ("what time are we leaving?" -> "we're leaving at 9am").
+ * Code, not the model, so the answer is always the organizer's words. Null when the question isn't one of these,
+ * or that detail is blank (then the normal "i'll check with <organizer>" path runs). Never invents anything.
+ */
+export function factAnswer(trip: Trip, text: string): string | null {
+  const t = text.toLowerCase();
+  const f = trip.facts ?? {};
+  const where = f.where || trip.place;
+  if (/\b(what time|when)\b.*\b(leav|head(ing)? out|depart|take off|go(ing)?\b|start)/.test(t) || /\bleaving at\b|\bdeparture\b/.test(t)) {
+    return f.leaveAt ? `we're leaving at ${f.leaveAt}${f.meetAt ? `, meeting at ${f.meetAt}` : ""}` : null;
+  }
+  if (/\b(where)\b.*\b(meet|meeting|pick ?up|pickup)\b|\bmeeting spot\b|\bmeet up\b.*\?/.test(t)) {
+    return f.meetAt ? `meeting at ${f.meetAt}${f.leaveAt ? `, leaving at ${f.leaveAt}` : ""}` : null;
+  }
+  if (/\b(what time|when)\b.*\b(back|home|return|done|end)\b|\bback by\b/.test(t)) {
+    return f.backBy ? `should be back by ${f.backBy}` : null;
+  }
+  if (/\bwhere\b.*\b(going|headed|we going|is it|trip|at)\b/.test(t)) {
+    return where ? `we're going to ${where}` : null;
+  }
+  if (/\b(what|anything)\b.*\b(bring|know|pack)\b/.test(t)) {
+    return f.notes ? `${trip.members[trip.organizer]?.name ?? "the organizer"} says: ${f.notes}` : null;
+  }
+  return null;
 }

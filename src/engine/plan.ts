@@ -55,7 +55,8 @@ export function planFor(trip: Trip, phone: Phone, seats: SeatPlan, budget: numbe
   const car = seats.cars.find((c) => c.driver === phone);
   const ride = seats.cars.find((c) => c.riders.includes(phone));
   let ridePart: string;
-  if (car && car.riders.length) ridePart = `you're driving ${listNames(car.riders.map((p) => nameOf(trip, p)))}.`;
+  if (trip.settings?.rides === false) ridePart = "";
+  else if (car && car.riders.length) ridePart = `you're driving ${listNames(car.riders.map((p) => nameOf(trip, p)))}.`;
   else if (car) ridePart = "you're driving, no riders.";
   else if (ride) ridePart = `you're riding with ${nameOf(trip, ride.driver)}.`;
   else ridePart = `still sorting out your ride, ${nameOf(trip, trip.organizer)} knows.`;
@@ -64,7 +65,7 @@ export function planFor(trip: Trip, phone: Phone, seats: SeatPlan, budget: numbe
   const extras: string[] = [];
   if (m.bringing.length) extras.push(`please bring the ${listNames(m.bringing)}.`);
   if (budget !== null) extras.push(`everyone's comfortable up to $${budget}.`);
-  const msgs = [clip(header + ridePart)];
+  const msgs = [clip(ridePart ? header + ridePart : header.replace(/: $/, "."))];
   if (extras.length) msgs.push(clip(extras.join(" ")));
   return msgs;
 }

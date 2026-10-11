@@ -5,7 +5,7 @@ import type { Understander } from "../llm/understand.js";
 import type { TripExtractor } from "../llm/tripRequest.js";
 import { type ConverseInput, type ConverseResult, type Converser, type Turn, replyIsGrounded } from "../llm/converse.js";
 import { keywordParse } from "../llm/understand.js";
-import { factsFor } from "./facts.js";
+import { factAnswer, factsFor } from "./facts.js";
 import type { ItineraryWriter } from "../llm/itinerary.js";
 import { draftMessage, isMakeItinerary, isSendItinerary, itineraryFacts, parsePlace, sendItinerary, templateItinerary } from "./itinerary.js";
 import { groupBudget } from "./plan.js";
@@ -18,7 +18,7 @@ import { template } from "../llm/phrase.js";
 import { askIntent, enqueueAsk, itemLabel, resolvePending, sendNextQueued } from "./asks.js";
 import { applyChainAnswer, newNeed, recomputeSeats, releaseCommitments, runChain } from "./chain.js";
 import {
-  type CommandEnv, type WebPerson, addPeople, announceJoins, markIn, newMember, setDate, createTrip, createWebTrip, greetWebSignup, handleCommand, joinWebTrip, optOut,
+  type CommandEnv, type WebPerson, type WebTripInput, addPeople, announceJoins, markIn, newMember, setDate, createTrip, createWebTrip, greetWebSignup, handleCommand, joinWebTrip, optOut,
   sendTripCreated, welcome,
 } from "./commands.js";
 import { type Ctx, type EngineConfig, isGoing, organizerName, seatsNeed } from "./context.js";
@@ -146,7 +146,7 @@ export class Engine {
   }
 
   /** Website "+": create a trip for the organizer. Returns its join code. */
-  async createTripFromWeb(input: WebPerson & { title: string; dateText: string | null }): Promise<string> {
+  async createTripFromWeb(input: WebTripInput): Promise<string> {
     let code = "";
     await this.run(async () => {
       code = createWebTrip(this.env(), input).code;
@@ -449,6 +449,14 @@ export class Engine {
       return;
     }
 
+    // "what time are we leaving" (with or without a "?"): answered from the organizer's own details when we have them.
+    const fromFacts = m.phone === trip.organizer ? null : factAnswer(trip, text);
+    if (fromFacts) {
+      ctx.out(m.phone, { kind: "text", text: fromFacts });
+      if (m.pendingAsk) ctx.out(m.phone, askIntent(trip, m, m.pendingAsk));
+      return;
+    }
+
     // An open question from the organizer ("which days are you free?"): their words are the answer.
     if (ask?.topic === "poll" && findPoll(trip, ask.pollId) && !/\?\s*$/.test(text)
         && !/\b(can'?t (come|make it) anymore|not (coming|going) anymore|i'?m out\b|drop(ping)? out|have to bail|gotta bail)/i.test(text)) {
@@ -582,6 +590,12 @@ export class Engine {
   /** Answer only from trip facts; anything else goes to the organizer. Then repeat the open question. */
   private async answerQuestion(trip: Trip, m: Member, text: string): Promise<void> {
     const ctx = this.ctx;
+    const fromFacts = m.phone === trip.organizer ? null : factAnswer(trip, text);
+    if (fromFacts) {
+      ctx.out(m.phone, { kind: "text", text: fromFacts });
+      if (m.pendingAsk) ctx.out(m.phone, askIntent(trip, m, m.pendingAsk));
+      return;
+    }
     if (await this.talk(trip, m, text)) return;
     if (m.phone === trip.organizer && this.deps.converse) {
       ctx.out(m.phone, { kind: "text", text: "sorry, i blanked on that one. mind sending it again?" });
@@ -664,20 +678,24 @@ export class Engine {
     const ctx = this.ctx;
     const named = Object.values(trip.members).filter((m) => m.name && !m.optedOut);
 
-    let seats = seatsNeed(trip);
-    if (!seats) {
-      const answered = named.filter((m) => m.rsvp !== "unknown").length;
-      const timedOut = trip.startedAt !== null && ctx.now() - trip.startedAt >= ctx.cfg.nudgeAfterMs;
-      if (answered === named.length || (answered * 2 >= named.length && timedOut)) {
-        seats = newNeed("seats", "seats", 0);
-        trip.needs.unshift(seats);
-      }
-    }
-    if (!seats) return;
+    const answered = named.filter((m) => m.rsvp !== "unknown").length;
+    const timedOut = trip.startedAt !== null && ctx.now() - trip.startedAt >= ctx.cfg.nudgeAfterMs;
+    const ready = answered === named.length || (answered * 2 >= named.length && timedOut);
+    const ridesOn = trip.settings?.rides !== false; // old trips: on
 
-    recomputeSeats(trip);
-    runChain(ctx, trip, seats);
-    if (seats.status !== "open") {
+    let seats = ridesOn ? seatsNeed(trip) : undefined;
+    if (ridesOn && !seats && ready) {
+      seats = newNeed("seats", "seats", 0);
+      trip.needs.unshift(seats);
+    }
+    if (ridesOn && !seats) return;
+    if (!ridesOn && !ready && !trip.needs.some((n) => n.asked.length)) return; // rides off: items start when RSVPs settle
+
+    if (seats) {
+      recomputeSeats(trip);
+      runChain(ctx, trip, seats);
+    }
+    if (!seats || seats.status !== "open") {
       for (const need of trip.needs) {
         if (need.kind !== "item") continue;
         runChain(ctx, trip, need);

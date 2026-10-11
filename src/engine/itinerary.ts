@@ -34,7 +34,11 @@ export function itineraryFacts(trip: Trip): string {
   const lines = [
     `trip: ${trip.title}`,
     `date/time: ${trip.dateText ?? "not set"}`,
-    `place: ${trip.place ?? "not set"}`,
+    `place: ${trip.facts?.where || trip.place || "not set"}`,
+    ...(trip.facts?.leaveAt ? [`leaving at: ${trip.facts.leaveAt}`] : []),
+    ...(trip.facts?.meetAt ? [`meeting spot: ${trip.facts.meetAt}`] : []),
+    ...(trip.facts?.backBy ? [`back by: ${trip.facts.backBy}`] : []),
+    ...(trip.facts?.notes ? [`organizer's notes: ${trip.facts.notes}`] : []),
     `organizer: ${organizerName(trip)}`,
     `going: ${going.map((m) => m.name).join(", ") || "nobody yet"}`,
   ];

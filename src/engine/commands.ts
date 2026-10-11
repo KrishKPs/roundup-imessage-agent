@@ -1,5 +1,5 @@
 // Exact text commands (spec 8), matched in code before any LLM call.
-import type { Member, Phone, State, Trip } from "../types.js";
+import type { Member, Phone, State, Trip, TripFacts, TripSettings } from "../types.js";
 import { listNames, newId, normalizePhone, parseName } from "../util.js";
 import { enqueueAsk } from "./asks.js";
 import { newNeed, releaseCommitments } from "./chain.js";
@@ -356,7 +356,15 @@ export interface WebPerson {
  * Website "+": the organizer creates a trip in one form. Nothing is texted yet: the shared pool can't text first,
  * so the page hands them a one-tap iMessage to us, and we greet them when it arrives.
  */
-export function createWebTrip(env: CommandEnv, input: WebPerson & { title: string; dateText: string | null }): Trip {
+export interface WebTripInput extends WebPerson {
+  title: string;
+  dateText: string | null;
+  facts?: TripFacts;
+  settings?: TripSettings;
+  items?: string[];
+}
+
+export function createWebTrip(env: CommandEnv, input: WebTripInput): Trip {
   const { ctx, state } = env;
   const phone = normalizePhone(input.phone);
   const now = ctx.now();
@@ -367,7 +375,13 @@ export function createWebTrip(env: CommandEnv, input: WebPerson & { title: strin
   const trip: Trip = {
     id: newId("trip"), code, title: input.title, dateText: input.dateText, organizer: phone, status: "collecting_members",
     members: { [phone]: organizer }, needs: [], log: [], createdAt: now, startedAt: null,
+    facts: input.facts ?? {}, settings: input.settings ?? { rides: true, budget: true },
   };
+  if (input.facts?.where) trip.place = input.facts.where;
+  // One item need per thing the organizer picked; their chains run after rides (or right away if rides is off).
+  for (const label of [...new Set((input.items ?? []).map((x) => x.trim().toLowerCase()).filter(Boolean))].slice(0, 8)) {
+    trip.needs.push(newNeed("item", label, 1));
+  }
   state.trips[trip.id] = trip;
   state.phoneTrip[phone] = trip.id;
   ctx.log(trip, "joined", `${input.name} started ${trip.title}`);

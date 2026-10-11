@@ -21,7 +21,23 @@ export interface Trip {
   notes?: { name: string; note: string; at: number }[]; // addition: heads-ups members asked us to pass on (organizer-only)
   awaitingPlace?: boolean; // addition: we asked the organizer where they're headed
   counters?: { texts: number; questions: number };
-  pendingJoins?: Phone[]; // addition: people who just joined, announced together on the next tick // addition: private DMs in+out, questions asked (dashboard stats)
+  pendingJoins?: Phone[];
+  facts?: TripFacts; // addition: details the organizer gave (create page); the bot answers from these, never invents
+  settings?: TripSettings; // addition: what Roundup sorts out (old trips: missing = everything on) // addition: people who just joined, announced together on the next tick // addition: private DMs in+out, questions asked (dashboard stats)
+}
+
+/** Organizer-given trip details. Empty string / missing = unknown: the bot says it'll check with the organizer. */
+export interface TripFacts {
+  where?: string;
+  leaveAt?: string;
+  meetAt?: string;
+  backBy?: string;
+  notes?: string;
+}
+
+export interface TripSettings {
+  rides: boolean; // run the "who can drive" chain
+  budget: boolean; // ask everyone their private budget
 }
 
 /** The day plan: drafted by the bot, edited by the organizer over text, then sent to everyone with a trip page link. */

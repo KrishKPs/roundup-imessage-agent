@@ -1,5 +1,7 @@
 <!doctype html>
-<!-- "+ new trip": the organizer fills one form, taps once to text Roundup, and gets one link for the group chat. -->
+<!-- "+ new trip": the organizer fills one form, taps once to text Roundup, and gets one link for the group chat.
+     Optional details let the bot answer people's questions; toggles choose what Roundup sorts out; a live preview
+     shows the exact first texts a member gets (built by the server from the bot's own templates). -->
 <html lang="en">
 <head>
 <meta charset="utf-8">
@@ -12,41 +14,216 @@
 <meta name="apple-mobile-web-app-title" content="Roundup">
 <link rel="apple-touch-icon" href="/apple-touch-icon.png">
 <script>if ("serviceWorker" in navigator) addEventListener("load", () => navigator.serviceWorker.register("/sw.js").catch(() => {}));</script>
-
 <title>New trip · Roundup</title>
 <link rel="stylesheet" href="/web.css">
+<script src="/qrcode.min.js"></script>
+<style>
+  .wrap { max-width: 980px; margin: 0 auto; padding: 22px 16px 60px; display: grid; gap: 18px; grid-template-columns: minmax(0, 1fr); }
+  @media (min-width: 900px) { .wrap { grid-template-columns: minmax(0, 1.1fr) minmax(0, .9fr); align-items: start; } .preview { position: sticky; top: 18px; } }
+  .help { font-weight: 400; font-size: 13px; color: var(--muted); margin-top: -2px; }
+  .ferr { color: var(--red); font-size: 14px; min-height: 0; margin: 0; }
+  .chips { display: flex; flex-wrap: wrap; gap: 6px; }
+  .chip { font: 600 14px system-ui; padding: 7px 12px; border-radius: 999px; border: 1px solid #c9dfee; background: #fff; color: var(--ink); cursor: pointer; }
+  .chip.on { background: linear-gradient(180deg, #8ee0a9, #3fbf6f); color: #fff; border-color: transparent; }
+  details { border: 1px solid #d6e8f3; border-radius: 16px; padding: 12px 14px; background: rgba(255,255,255,.55); }
+  summary { font-weight: 800; cursor: pointer; }
+  details .intro { color: var(--muted); font-size: 14px; margin: 8px 0 12px; }
+  details form, .stack { display: grid; gap: 12px; }
+  textarea { font: inherit; color: var(--ink); padding: 13px 14px; border-radius: 14px; border: 1px solid #c9dfee; background: #fff; width: 100%; min-height: 70px; resize: vertical; }
+  .section { margin-top: 6px; }
+  .section h2 { margin: 6px 0 10px; font-size: 14px; text-transform: uppercase; letter-spacing: 1.2px; color: var(--muted); }
+  .toggle { display: flex; align-items: center; justify-content: space-between; gap: 12px; padding: 10px 0; border-bottom: 1px solid #e3eef5; }
+  .toggle .t { font-weight: 700; } .toggle .c { font-size: 13px; color: var(--muted); font-weight: 400; }
+  .switch { width: 50px; height: 30px; border-radius: 999px; border: 0; background: #cfdde6; position: relative; cursor: pointer; flex: none; }
+  .switch::after { content: ""; position: absolute; top: 3px; left: 3px; width: 24px; height: 24px; border-radius: 50%; background: #fff; transition: transform .2s; box-shadow: 0 1px 3px rgba(0,0,0,.2); }
+  .switch[aria-checked="true"] { background: #3fbf6f; } .switch[aria-checked="true"]::after { transform: translateX(20px); }
+  .switch:disabled { opacity: .7; cursor: default; }
+  .own { display: flex; gap: 8px; margin-top: 8px; } .own input { flex: 1; min-width: 0; width: auto; }
+  .own button { font: 700 14px system-ui; padding: 0 14px; border-radius: 12px; border: 1px solid #c9dfee; background: #fff; }
+  .go:disabled { opacity: .5; cursor: not-allowed; }
+  .demo { font-size: 14px; color: var(--muted); text-align: right; } .demo a { color: var(--muted); }
+  /* preview: an iMessage-style thread */
+  .thread { display: flex; flex-direction: column; gap: 8px; margin-top: 10px; }
+  .bub { align-self: flex-start; max-width: 88%; padding: 9px 13px; border-radius: 18px; background: #e9e9eb; color: #000; font-size: 15px; line-height: 1.35; }
+  .bub.next { background: transparent; border: 1px dashed #c4c4c8; color: #8e8e93; font-size: 14px; }
+  .phonehead { text-align: center; font-size: 13px; color: var(--muted); }
+  .phonehead b { display: block; color: var(--ink); font-size: 15px; }
+  /* success */
+  .code { font: 800 64px/1 ui-monospace, Menlo, monospace; letter-spacing: 4px; text-align: center; margin: 10px 0; color: var(--ink); }
+  .invite { white-space: pre-wrap; background: #f2f8fc; border-radius: 14px; padding: 12px 14px; font-size: 16px; }
+  #qr { display: grid; place-items: center; margin: 12px 0; } #qr img, #qr canvas { background: #fff; padding: 8px; border-radius: 12px; }
+</style>
 </head>
 <body>
-<main class="sheet">
-  <div class="brand">Roundup</div>
+<div class="wrap" id="wrap">
   <section class="card" id="card">
+    <div class="brand" style="margin:0 0 6px">Roundup</div>
     <p class="eyebrow">new trip</p>
     <h1>What are you planning?</h1>
-    <form id="f">
-      <label>Trip name<input name="title" required maxlength="60" placeholder="Beach day"></label>
-      <label>When <span style="font-weight:400">(optional)</span><input name="date" maxlength="40" placeholder="Saturday"></label>
-      <label>Your first name<input name="name" autocomplete="given-name" required maxlength="30"></label>
-      <label>Your phone number<input name="phone" type="tel" autocomplete="tel" required placeholder="(919) 555-0123"></label>
-      <button class="go" type="submit">Create trip</button>
+    <p class="demo" id="demoRow" hidden><a href="#" id="demoFill">fill demo values</a></p>
+    <form id="f" class="stack" novalidate>
+      <label>Trip name<input name="title" maxlength="40" placeholder="beach day" autocomplete="off"></label>
+      <div class="chips" data-for="title"></div>
+      <p class="ferr" data-err="title"></p>
+
+      <label>Day<input name="date" maxlength="40" placeholder="this saturday" autocomplete="off"></label>
+      <div class="chips" data-for="date"></div>
+      <p class="ferr" data-err="date"></p>
+
+      <label>Your first name<input name="name" maxlength="20" autocomplete="given-name"></label>
+      <p class="ferr" data-err="name"></p>
+
+      <label>Your phone number
+        <span class="help">so roundup knows you're the host. it's never shown to anyone</span>
+        <input name="phone" type="tel" autocomplete="tel" placeholder="(919) 555-0123">
+      </label>
+      <p class="ferr" data-err="phone"></p>
+
+      <details id="details">
+        <summary>Details the bot can answer</summary>
+        <p class="intro">fill these in and the bot can answer people's questions. leave them blank and it will check with you instead.</p>
+        <div class="stack">
+          <label>Where<input name="where" maxlength="60" placeholder="wrightsville beach"></label>
+          <label>Leaving at<input name="leaveAt" maxlength="20" placeholder="9am"></label>
+          <label>Meeting spot<input name="meetAt" maxlength="60" placeholder="student union parking lot"></label>
+          <label>Back by<input name="backBy" maxlength="20" placeholder="8pm"></label>
+          <label>Anything else people should know<textarea name="notes" maxlength="200" placeholder="bring sunscreen"></textarea></label>
+        </div>
+      </details>
+
+      <div class="section">
+        <h2>What should Roundup sort out</h2>
+        <div class="toggle"><div><div class="t">Who's coming</div><div class="c">always on</div></div><button type="button" class="switch" aria-checked="true" disabled aria-label="who's coming (always on)"></button></div>
+        <div class="toggle"><div><div class="t">Rides</div><div class="c">asks one person at a time until there are enough seats</div></div><button type="button" class="switch" id="rides" role="switch" aria-checked="true" aria-label="rides"></button></div>
+        <div class="toggle"><div><div class="t">Budgets, privately</div><div class="c">you only see one group number, never who said what</div></div><button type="button" class="switch" id="budget" role="switch" aria-checked="true" aria-label="budgets"></button></div>
+        <div style="padding-top:10px"><div class="t" style="font-weight:700;margin-bottom:8px">Things someone needs to bring</div>
+          <div class="chips" id="items"></div>
+          <div class="own"><input id="ownItem" maxlength="20" placeholder="add your own"><button type="button" id="addOwn">Add</button></div>
+          <p class="ferr" data-err="items"></p>
+        </div>
+      </div>
+
+      <button class="go" type="submit" id="create" disabled>Create trip</button>
       <p class="err" id="err"></p>
     </form>
   </section>
-  <p class="fine">Roundup texts each person 1:1 in iMessage, so nobody has to download anything and the group chat stays quiet.</p>
-</main>
-<script>
-  const esc = (s) => String(s ?? "").replace(/[&<>"]/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" }[c]));
-  const card = document.getElementById("card");
 
-  document.getElementById("f").addEventListener("submit", async (e) => {
+  <aside class="card preview" id="preview">
+    <p class="phonehead"><b>Roundup</b>what a friend gets after joining</p>
+    <div class="thread" id="thread"></div>
+    <p class="fine">everyone gets these privately. nothing goes to the group chat.</p>
+  </aside>
+</div>
+<script>
+  const $ = (s, r = document) => r.querySelector(s);
+  const form = $("#f");
+  const field = (n) => form.elements[n];
+  const el = (tag, cls, text) => { const e = document.createElement(tag); if (cls) e.className = cls; if (text != null) e.textContent = text; return e; };
+  const ITEMS = ["cooler", "speaker", "blanket", "football", "frisbee", "tent", "grill", "snacks"];
+  const items = new Set();
+
+  // ---- suggestion chips (tap fills the field)
+  function chipsFor(name, values) {
+    const box = $(`.chips[data-for="${name}"]`);
+    for (const v of values) {
+      const b = el("button", "chip", v); b.type = "button";
+      b.addEventListener("click", () => { field(name).value = v; update(); });
+      box.appendChild(b);
+    }
+  }
+  chipsFor("title", ["beach day", "hike", "camping trip", "road trip", "concert", "ski trip"]);
+  chipsFor("date", ["this saturday", "this sunday", "next weekend"]);
+
+  // ---- items: preset chips + your own (max 8, 20 chars each)
+  function drawItems() {
+    const box = $("#items"); box.replaceChildren();
+    for (const v of [...new Set([...ITEMS, ...items])]) {
+      const b = el("button", "chip" + (items.has(v) ? " on" : ""), v); b.type = "button";
+      b.addEventListener("click", () => { items.has(v) ? items.delete(v) : items.size < 8 ? items.add(v) : showErr("items", "pick up to 8 things"); drawItems(); update(); });
+      box.appendChild(b);
+    }
+  }
+  $("#addOwn").addEventListener("click", () => {
+    const v = $("#ownItem").value.replace(/\s+/g, " ").trim().toLowerCase();
+    if (!v) return;
+    if (v.length > 20) return showErr("items", "keep each item under 20 characters");
+    if (items.size >= 8) return showErr("items", "pick up to 8 things");
+    items.add(v); $("#ownItem").value = ""; showErr("items", ""); drawItems(); update();
+  });
+  $("#ownItem").addEventListener("keydown", (e) => { if (e.key === "Enter") { e.preventDefault(); $("#addOwn").click(); } });
+  drawItems();
+
+  // ---- toggles
+  for (const id of ["rides", "budget"]) {
+    $("#" + id).addEventListener("click", (e) => { const b = e.currentTarget; b.setAttribute("aria-checked", b.getAttribute("aria-checked") === "true" ? "false" : "true"); update(); });
+  }
+  const on = (id) => $("#" + id).getAttribute("aria-checked") === "true";
+
+  // ---- validation (plain words under the field; the server checks again)
+  function phoneOk(raw) {
+    const s = String(raw || "").trim(), d = s.replace(/\D/g, "");
+    if (s.startsWith("+")) return d.length >= 8 && d.length <= 15;
+    return d.length === 10 || (d.length === 11 && d.startsWith("1"));
+  }
+  function showErr(name, msg) { const p = $(`[data-err="${name}"]`); if (p) p.textContent = msg || ""; }
+  function check(showAll) {
+    const v = (n) => field(n).value.trim();
+    const errs = {
+      title: !v("title") ? "add a trip name" : "",
+      date: !v("date") ? "add a day" : "",
+      name: !v("name") ? "add your first name" : "",
+      phone: !v("phone") ? "add your phone number" : !phoneOk(v("phone")) ? "that doesn't look like a phone number" : "",
+    };
+    for (const [k, m] of Object.entries(errs)) if (showAll || touched.has(k)) showErr(k, m);
+    return Object.values(errs).every((m) => !m);
+  }
+  const touched = new Set();
+  for (const n of ["title", "date", "name", "phone"]) field(n).addEventListener("blur", () => { touched.add(n); check(false); });
+
+  // ---- live preview, from the bot's own templates (server), debounced
+  let previewTimer = null;
+  function update() {
+    $("#create").disabled = inFlight || !check(false);
+    clearTimeout(previewTimer);
+    previewTimer = setTimeout(drawPreview, 200);
+  }
+  async function drawPreview() {
+    const body = { title: field("title").value, date: field("date").value, name: field("name").value, rides: on("rides"), budget: on("budget"), items: [...items] };
+    const r = await fetch("/api/preview", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body) }).catch(() => null);
+    if (!r || !r.ok) return;
+    const { messages } = await r.json();
+    const t = $("#thread"); t.replaceChildren();
+    for (const m of messages) t.appendChild(el("div", "bub" + (m.next ? " next" : ""), m.text));
+  }
+  form.addEventListener("input", update);
+
+  // ---- demo helper (DEMO_MODE only; never a phone number)
+  let cfg = {};
+  fetch("/api/config").then((r) => r.json()).then((c) => { cfg = c; $("#demoRow").hidden = !c.demoMode; }).catch(() => {});
+  $("#demoFill").addEventListener("click", (e) => {
     e.preventDefault();
-    const btn = e.target.querySelector("button");
-    btn.disabled = true; btn.textContent = "creating…";
-    const body = Object.fromEntries(new FormData(e.target));
-    const res = await fetch("/api/trips", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body) });
-    const data = await res.json().catch(() => ({}));
-    if (!res.ok) {
-      document.getElementById("err").textContent = data.error || "Something went wrong.";
-      btn.disabled = false; btn.textContent = "Create trip";
+    field("title").value = "beach day"; field("date").value = "saturday"; field("name").value = "priya";
+    items.clear(); items.add("cooler"); items.add("speaker"); drawItems(); update();
+  });
+
+  // ---- create (same route and flow as before, plus the new fields)
+  let inFlight = false;
+  form.addEventListener("submit", async (e) => {
+    e.preventDefault();
+    if (inFlight || !check(true)) return;
+    inFlight = true; const btn = $("#create"); btn.disabled = true; btn.textContent = "creating…"; $("#err").textContent = "";
+    const fv = (n) => field(n).value;
+    const body = {
+      title: fv("title"), date: fv("date"), name: fv("name"), phone: fv("phone"),
+      facts: { where: fv("where"), leaveAt: fv("leaveAt"), meetAt: fv("meetAt"), backBy: fv("backBy"), notes: fv("notes") },
+      rides: on("rides"), budget: on("budget"), items: [...items],
+    };
+    const res = await fetch("/api/trips", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body) }).catch(() => null);
+    const data = res ? await res.json().catch(() => ({})) : {};
+    if (!res || !res.ok) {
+      for (const [k, m] of Object.entries(data.errors || {})) showErr(k, m);
+      $("#err").textContent = "couldn't create the trip, try again";
+      inFlight = false; btn.textContent = "Create trip"; update(); // everything typed stays
       return;
     }
     // Remember it on this phone, so it shows up in the app's trip list.
@@ -55,24 +232,45 @@
       list.unshift({ code: data.code, title: body.title, dateText: body.date || null, at: Date.now() });
       localStorage.setItem("roundup.trips", JSON.stringify(list));
     } catch {}
-    const invite = `${body.name} is planning ${body.title}! tap to join, Roundup (an AI) sorts out the details with you 1:1: ${data.joinUrl}`;
-    card.innerHTML = `
-      <p class="eyebrow">${esc(body.title)} is ready</p>
-      <h1>Two taps and you're done</h1>
-      <div class="step"><b>1</b>Connect your phone to Roundup</div>
-      <a class="go imsg" href="${esc(data.smsLink)}">Text Roundup</a>
-      <div class="step"><b>2</b>Send this link to your group chat</div>
-      <div class="linkbox">${esc(data.joinUrl)}</div>
-      ${navigator.share ? '<button class="go" id="share" style="margin-top:12px">Share link</button>' : ""}
-      <button class="ghost" id="copy">Copy invite</button>
-      <p class="muted" style="margin-top:16px">When everyone's in, text <b>start</b> to Roundup.</p>
-      <a class="ghost" href="/app" style="text-decoration:none">Go to my trips</a>`;
-    document.getElementById("share")?.addEventListener("click", () => navigator.share({ text: invite }).catch(() => undefined));
-    document.getElementById("copy").addEventListener("click", async (ev) => {
-      try { await navigator.clipboard.writeText(invite); ev.target.textContent = "Copied!"; }
-      catch { ev.target.textContent = "Couldn't copy, long-press the link above"; }
-    });
+    success(body, data);
   });
+
+  // ---- success screen (no reload). Built with textContent: nothing typed is ever parsed as HTML.
+  function success(body, data) {
+    const card = $("#card"); card.replaceChildren();
+    $("#preview").remove();
+    $("#wrap").style.gridTemplateColumns = "minmax(0, 1fr)"; card.style.maxWidth = "560px"; card.style.margin = "0 auto";
+    card.append(el("div", "brand", "Roundup"), el("p", "eyebrow", "you're set"), el("h1", "", `${body.title} is live`));
+    card.append(el("div", "code", data.code));
+    // Step 1 (current flow): the organizer texts Roundup once, so the bot knows they're the host.
+    const step = (n, t) => { const d = el("div", "step"); d.append(el("b", "", String(n)), document.createTextNode(t)); return d; };
+    card.append(step(1, "Text Roundup once so it knows you're the host"));
+    const imsg = el("a", "go imsg", "Text Roundup"); imsg.href = data.smsLink; card.append(imsg);
+    // Step 2: the last message in the group chat.
+    card.append(step(2, "your last message in the group chat"));
+    const invite = cfg.joinByText
+      ? `planning ${body.title} for ${body.date}! text  join ${data.code}  to ${cfg.agentNumber} and roundup will sort out rides and everything. no more 300 messages here`
+      : `planning ${body.title} for ${body.date}! tap to join and roundup will sort out rides and everything. no more 300 messages here: ${data.joinUrl}`;
+    card.append(el("div", "invite", invite));
+    const copy = el("button", "go", "Copy invite"); copy.type = "button"; copy.style.marginTop = "10px";
+    copy.addEventListener("click", async () => {
+      try { await navigator.clipboard.writeText(invite); copy.textContent = "copied"; setTimeout(() => (copy.textContent = "Copy invite"), 2000); }
+      catch { copy.textContent = "couldn't copy, long-press the text above"; }
+    });
+    card.append(copy);
+    if (navigator.share) {
+      const share = el("button", "ghost", "Share"); share.type = "button";
+      share.addEventListener("click", () => navigator.share({ text: invite }).catch(() => {}));
+      card.append(share);
+    }
+    const qr = el("div"); qr.id = "qr"; card.append(qr);
+    if (typeof QRCode !== "undefined" && data.joinUrl) new QRCode(qr, { text: data.joinUrl, width: 160, height: 160, correctLevel: QRCode.CorrectLevel.M });
+    card.append(el("p", "muted", "people who join get their questions privately. when everyone has joined, text start to Roundup."));
+    const board = el("a", "ghost", "open live board"); board.href = `/?code=${encodeURIComponent(data.code)}`; board.style.textDecoration = "none"; card.append(board);
+    const mine = el("a", "ghost", "go to my trips"); mine.href = "/app"; mine.style.textDecoration = "none"; card.append(mine);
+  }
+
+  update(); drawPreview();
 </script>
 </body>
 </html>
