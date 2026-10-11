@@ -48,6 +48,17 @@ describe("organizer asks everyone", () => {
     expect(h.transport.to(org)[0]).toMatch(/just text "ask everyone" and your question/);
   });
 
+  it("a bare yes to an either-or question gets one 'which one?', then the real pick is reported once", async () => {
+    const { h, org, sam } = await campTrip();
+    await h.say(org, "ask Sam did you mean wednesday or the weekend");
+    h.transport.clear();
+    await h.say(sam, "Yes sorry");
+    expect(h.transport.to(sam)).toEqual(["ha which one? did you mean wednesday or the weekend?"]);
+    expect(h.transport.to(org)).toHaveLength(0); // nothing useful to report yet
+    await h.say(sam, "Weekend");
+    expect(h.transport.to(org)).toEqual(['Sam says "Weekend"']); // one report, no "said yes to", no extra heads-up
+  });
+
   it("members can't poll the group", async () => {
     const { h, sam, maya } = await campTrip();
     await h.say(sam, "ask everyone if they like pizza");

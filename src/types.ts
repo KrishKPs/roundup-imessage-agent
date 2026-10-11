@@ -138,6 +138,7 @@ export interface Ask {
   needId: string | null;
   pollId?: string; // topic "poll": which organizer question this is
   step?: InterviewStep; // topic "interview": which setup question
+  clarified?: boolean; // topic "poll": already asked "which one?" after a bare yes/no to an either-or question
   askedAt: number; // 0 while still queued
   nudged: boolean;
 }

@@ -24,7 +24,7 @@ import {
 import { type Ctx, type EngineConfig, goingMembers, isGoing, organizerName, seatsNeed } from "./context.js";
 import { finalize } from "./plan.js";
 import { type SeedInput, buildDemoTrip } from "./seed.js";
-import { announce, cleanNote, findPoll, recordPollAnswer, resolveNames, startPoll } from "./poll.js";
+import { announce, cleanNote, findPoll, isBareYesNo, isEitherOr, recordPollAnswer, resolveNames, startPoll } from "./poll.js";
 import { checkSilence, restate } from "./timers.js";
 import { finishInterview, interviewAnswer, maybeAskPrefs, prefCounts, readConstraints, readInterests } from "./prefs.js";
 
@@ -514,6 +514,13 @@ export class Engine {
     // An open question from the organizer ("which days are you free?"): their words are the answer.
     if (ask?.topic === "poll" && findPoll(trip, ask.pollId) && !/\?\s*$/.test(text)
         && !/\b(can'?t (come|make it) anymore|not (coming|going) anymore|i'?m out\b|drop(ping)? out|have to bail|gotta bail)/i.test(text)) {
+      // "yes" to "wednesday or the weekend?" says nothing: ask which one, once, instead of reporting a useless yes.
+      const question = findPoll(trip, ask.pollId)!.question;
+      if (!isStale && !ask.clarified && isEitherOr(question) && isBareYesNo(text)) {
+        ask.clarified = true;
+        ctx.out(m.phone, { kind: "text", text: `ha which one? ${question}` });
+        return;
+      }
       recordPollAnswer(this.ctx, trip, m, ask, text);
       if (!isStale) resolvePending(this.ctx, trip, m);
       else m.staleAsk = null;

@@ -231,12 +231,24 @@ function topicOf(question: string): { yes: (who: string) => string; no: (who: st
   return null;
 }
 
+/** "wednesday or the weekend?" (but not "you coming or not?"): a yes/no answer doesn't pick anything. */
+export function isEitherOr(question: string): boolean {
+  return /\w\s+or\s+\w/i.test(question) && !/\bor not\b/i.test(question);
+}
+
+/** "yes", "yeah!!", "nope": a yes or no and nothing else. */
+export function isBareYesNo(answer: string): boolean {
+  const a = answer.trim();
+  return a.split(/\s+/).length <= 2 && (SAID_YES.test(a) || SAID_NO.test(a)) && !/\d/.test(a);
+}
+
 /** What people said, in plain words: "Hasti's down for camping", or "Sam and Leo said yes, Jo said no". */
 export function summarizeAnswers(question: string, _open: boolean, answers: { name: string; answer: string }[], silent: string[], done = true): string {
   const quiet = silent.length ? `${done ? "no answer from" : "still waiting on"} ${joinNames(silent)}` : "";
   const q = question.trim().replace(/[?.!]+$/, "");
   const words = (a: string) => a.trim().split(/\s+/).length;
-  const lean = (a: string) => (emojiMeaning(a, question) === "yes" ? "yes" : emojiMeaning(a, question) === "no" ? "no" : SAID_YES.test(a.trim()) ? "yes" : SAID_NO.test(a.trim()) ? "no" : /^(maybe|idk|not sure|prob(ably)?)\b/i.test(a.trim()) ? "maybe" : "other");
+  const eitherOr = isEitherOr(question); // a yes to "A or B?" isn't a pick: quote it instead
+  const lean = (a: string) => (eitherOr && isBareYesNo(a) ? "other" : emojiMeaning(a, question) === "yes" ? "yes" : emojiMeaning(a, question) === "no" ? "no" : SAID_YES.test(a.trim()) ? "yes" : SAID_NO.test(a.trim()) ? "no" : /^(maybe|idk|not sure|prob(ably)?)\b/i.test(a.trim()) ? "maybe" : "other");
   const quote = (a: string) => `"${a.trim().replace(/["\s]+$/, "")}"`;
   if (answers.length === 1) {
     const { name } = answers[0];

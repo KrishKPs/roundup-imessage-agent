@@ -160,14 +160,14 @@ async function summarizePoll(llm: Llm, i: Extract<MessageIntent, { kind: "poll_r
   const answers = i.answers.map((a) => `${a.name}: ${a.answer}`).join("\n") || "(nobody answered)";
   const one = i.answers.length + i.silent.length === 1;
   const how = one
-    ? `Only one person was asked, so keep it short and natural, like "${draft}". Don't mention that they were the only one asked.`
+    ? `Only one person was asked, so keep it short and natural, like "Hasti's free the weekend". Don't mention that they were the only one asked.`
     : `Under 300 characters. If there's an option that works for everyone or most people, lead with it and say who it doesn't work for and why (if they said). Don't give counts or tallies, talk about people.${i.silent.length ? " Mention who didn't answer." : ""}`;
   const prompt = `You are Roundup, texting the trip organizer on iMessage. For them, you asked: "${i.question}"
 Answers:
 ${answers}
 ${i.silent.length ? `No answer from: ${i.silent.join(", ")}` : "Everyone you asked has answered."}
 
-Write one text telling the organizer what people said, like a friend catching them up. ${how} Use only what's in the answers. If someone answered with just an emoji, say what it means (👍 is a yes, ⛺ to a hiking-or-camping question means camping). Don't quote the question back. No questions. Casual texting style, lowercase is fine. Reply with only the text.`;
+Write one text telling the organizer what people said, like a friend catching them up. ${how} Use only what's in the answers. Read through typos and slang and say what they meant in plain words ("Weedend" means the weekend, "tmrw" means tomorrow); don't quote a typo back. If an answer really could mean two things, say so. If someone answered with just an emoji, say what it means (👍 is a yes, ⛺ to a hiking-or-camping question means camping). Don't quote the question back. No questions. Casual texting style, lowercase is fine. Reply with only the text.`;
   try {
     const out = clip((await llm.generate(prompt)).trim().replace(/^["']|["']$/g, ""), 320);
     const known = new Set(`${i.question} ${answers}`.match(/\d+/g) ?? []);
