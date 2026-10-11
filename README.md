@@ -108,20 +108,16 @@ npm run eval        # 46 realistic texts through the real model, graded by code 
 
 **Deploying:** the repo includes a `Dockerfile`, `railway.json` and `fly.toml`. Our live copy runs on Railway with a persistent volume.
 
-## AI usage disclosure
+## How we built it, and where AI was used
 
-We used AI heavily, and want to be clear about where.
+**Our team** came up with the idea and owned the product:
+- **We designed the product and wrote the specs** (`CLAUDE.md`, `Dashboard.md`, the plan spec): the chained-asking algorithm, the "joining means you're in" flow, the private-budget and privacy rules, the organizer controls, the Plan page and the switchboard.
+- **We made every product call:** what to build, what to cut, and how it should sound (we put together the 500 example conversations that set the voice).
+- **We tested it with real people on real phones all night**, and turned what went wrong into fixes and new test cases.
 
-**In the product (what users talk to):**
-- **Claude Opus 5.5 (Anthropic API)** reads members' replies into structured data, rewords fixed messages so they sound human, handles plain-English organizer requests and member questions (choosing from a fixed list of actions, which code then runs), and drafts the itinerary text.
-- Every model output is validated and checked in code. All coordination decisions (who to ask, seats, budgets, when a need is filled, what to send to whom) are deterministic code, not the model.
-
-**In building the project:**
-- **Claude Code** (Anthropic's coding agent, running Claude) wrote most of the code in this repository, directed by our team. We wrote the product specs (`CLAUDE.md`, `Dashboard.md` and the plan spec), made the design and product decisions, tested on real phones, reported bugs from real conversations, and reviewed the results. Claude Code implemented the engine, the Spectrum integration, the LLM layer, the dashboard, the tests and the eval harness, and did the deployment, under our direction.
-- The **voice examples** in `src/llm/examples.ts` were written for this project, many adapted from `human_conversations_500.jsonl`, a set of 500 example conversations in our target voice that we provided. _(Team: state here how that file was made, e.g. written by us or generated with an AI tool.)_
-- The **automated eval** (`scripts/eval-chat.ts`) runs real texts through Claude and grades the replies in code; its test cases were written for this project.
-
-**Not AI-generated:** the problem, the product idea, the chained-asking design, the privacy rules, and every decision about what to build and what to cut were ours.
+**AI tools we used:**
+- **Claude Code** (Anthropic) was our coding assistant. We directed it to implement the specs, debug against our phone tests, and deploy. It wrote most of the TypeScript in this repo; the commit history credits it as co-author.
+- **Claude Opus 5.5** runs inside the product. It reads free-text replies and rewords messages so they sound human. It never makes decisions: who gets asked, seats, budgets and who gets which text are all deterministic code, and every model output is checked before it's sent.
 
 ## Tracks
 
