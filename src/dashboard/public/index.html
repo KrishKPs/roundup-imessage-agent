@@ -1,131 +1,387 @@
 <!doctype html>
-<!-- The trip board: shows the private 1:1 conversations as progress, never their content. -->
+<!-- The Roundup switchboard (Dashboard.md): a live window into many private 1:1 conversations, without their content.
+     Plain HTML/CSS/SVG + one script. No framework, no CDN (works offline against localhost). -->
 <html lang="en">
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>Roundup trip board</title>
+<title>Roundup switchboard</title>
 <style>
   :root {
-    --sky: #dff3ff; --sky-deep: #7cc8f2; --ink: #0d3550; --muted: #4f7590;
-    --green: #3fbf6f; --green-soft: #d9f7e3; --red: #e0605c; --red-soft: #fde3e2;
-    --amber: #e8a93a; --amber-soft: #fff1d6; --card: rgba(255,255,255,0.78);
+    --sky-1: #d9f1ff; --sky-2: #8fd0f5; --sky-3: #2f9be0;
+    --leaf: #4fbf6b; --leaf-deep: #23884a; --sun: #ffb84d;
+    --ink: #0f2a3d; --ink-soft: #456377;
+    --glass: rgba(255,255,255,0.62); --glass-edge: rgba(255,255,255,0.9); --radius: 18px;
   }
   * { box-sizing: border-box; }
-  body {
-    margin: 0; min-height: 100vh; color: var(--ink);
-    font: 20px/1.35 "Segoe UI", "Helvetica Neue", system-ui, sans-serif;
-    background: linear-gradient(180deg, #bfe7ff 0%, #e8f8ff 45%, #dcf5e4 100%) fixed;
-  }
-  main { max-width: 1280px; margin: 0 auto; padding: 28px 24px 40px; display: grid; gap: 20px;
-         grid-template-columns: 1.6fr 1fr; }
-  .card { background: var(--card); border-radius: 22px; padding: 20px 24px;
-          border: 1px solid rgba(255,255,255,0.9);
-          box-shadow: 0 10px 30px rgba(30,110,160,0.15), inset 0 1px 0 rgba(255,255,255,0.95);
-          backdrop-filter: blur(8px); }
-  header { grid-column: 1 / -1; display: flex; align-items: center; justify-content: space-between; gap: 16px; }
-  h1 { margin: 0; font-size: 44px; letter-spacing: -0.5px; }
-  .sub { color: var(--muted); font-size: 22px; }
-  .code { font: 700 40px/1 ui-monospace, Menlo, monospace; padding: 14px 22px; border-radius: 16px; color: #fff;
-          background: linear-gradient(180deg, #5fd08a, #2ea85c); box-shadow: inset 0 2px 0 rgba(255,255,255,.5), 0 6px 16px rgba(46,168,92,.35); }
-  .code small { display: block; font: 600 13px system-ui; opacity: .9; letter-spacing: 1px; margin-bottom: 6px; }
-  h2 { margin: 0 0 12px; font-size: 18px; text-transform: uppercase; letter-spacing: 1.5px; color: var(--muted); }
-  .chips { display: flex; flex-wrap: wrap; gap: 10px; }
-  .chip { padding: 8px 16px; border-radius: 999px; font-weight: 600; background: #eef6fb; border: 1px solid #d3e6f2; }
-  .chip.in { background: var(--green-soft); border-color: #a8e4bc; }
-  .chip.out, .chip.opted_out { background: var(--red-soft); border-color: #f4b9b6; text-decoration: line-through; opacity: .75; }
-  .chip.maybe { background: var(--amber-soft); border-color: #f2d394; }
-  .chip.waiting { color: var(--muted); }
-  .chip .s { font-weight: 400; font-size: 15px; margin-left: 6px; opacity: .8; }
-  .need { margin-bottom: 18px; }
-  .need-head { display: flex; justify-content: space-between; font-weight: 700; font-size: 24px; margin-bottom: 8px; }
-  .bar { height: 22px; border-radius: 999px; background: #e4eef5; overflow: hidden; box-shadow: inset 0 1px 3px rgba(0,0,0,.08); }
-  .fill { height: 100%; border-radius: 999px; transition: width .6s ease;
-          background: linear-gradient(180deg, #8ee0a9, #3fbf6f); box-shadow: inset 0 2px 0 rgba(255,255,255,.55); }
-  .need.short .fill { background: linear-gradient(180deg, #f6c46d, #e8a93a); }
-  .chain { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 10px; font-size: 17px; }
-  .link { padding: 4px 12px; border-radius: 10px; background: #f2f7fa; color: var(--muted); }
-  .link.providing { background: var(--green-soft); color: #1d7a43; font-weight: 700; }
-  .link.said_no { background: var(--red-soft); color: #a33a36; }
-  .link.asked { background: #dcefff; color: #1f5f8b; font-weight: 600; outline: 2px solid #9fd0f3; }
-  .arrow { color: #a9c3d4; align-self: center; }
-  .feed { list-style: none; margin: 0; padding: 0; }
-  .feed li { padding: 10px 0; border-bottom: 1px solid #e3eef5; display: flex; gap: 12px; align-items: baseline; }
-  .feed li:first-child { font-weight: 700; animation: pop .5s ease; }
-  .feed time { color: var(--muted); font-size: 15px; min-width: 64px; }
-  @keyframes pop { from { background: #fffbe0; } to { background: transparent; } }
-  .budget { font-size: 26px; font-weight: 700; }
-  .private { color: var(--muted); font-size: 15px; margin-top: 6px; }
-  .empty { grid-column: 1 / -1; text-align: center; padding: 80px; color: var(--muted); font-size: 28px; }
-  .status { font-size: 16px; padding: 6px 14px; border-radius: 999px; background: #e6f4ff; color: #1f5f8b; font-weight: 700; }
-  @media (max-width: 900px) { main { grid-template-columns: 1fr; } h1 { font-size: 32px; } }
-  .join { display: flex; align-items: center; gap: 18px; }
-  #qr { background: #fff; padding: 10px; border-radius: 14px; box-shadow: 0 6px 16px rgba(30,110,160,.2); }
-  #qr img, #qr canvas { display: block; }
-  .scan { font-size: 15px; color: var(--muted); max-width: 120px; }
-  .plus { position: fixed; right: 22px; bottom: 22px; width: 64px; height: 64px; border-radius: 50%; display: grid; place-items: center;
-          font: 300 42px/1 system-ui; color: #fff; text-decoration: none; z-index: 5;
-          background: linear-gradient(180deg, #5fd08a, #2ea85c); box-shadow: inset 0 2px 0 rgba(255,255,255,.5), 0 8px 20px rgba(46,168,92,.4); }
+  html, body { height: 100%; margin: 0; overflow: hidden; }
+  body { color: var(--ink); font: 15px/1.35 system-ui, -apple-system, "Segoe UI", sans-serif;
+         background: linear-gradient(180deg, var(--sky-1), var(--sky-2)) fixed; }
+  /* drifting bubbles */
+  .bubble { position: fixed; bottom: -200px; border-radius: 50%; pointer-events: none; z-index: 0;
+            background: radial-gradient(circle at 30% 30%, rgba(255,255,255,.75), rgba(255,255,255,.08) 60%);
+            border: 1px solid rgba(255,255,255,.45); animation: rise linear infinite; opacity: .55; }
+  @keyframes rise { to { transform: translateY(-130vh); } }
+  .app { position: relative; z-index: 1; height: 100vh; display: grid; gap: 14px; padding: 14px;
+         grid-template-rows: auto 1fr auto auto; grid-template-columns: 22fr 48fr 30fr; }
+  .card { background: var(--glass); border: 1px solid var(--glass-edge); border-radius: var(--radius);
+          backdrop-filter: blur(12px); box-shadow: 0 10px 30px rgba(20,90,140,.15), inset 0 1px 0 rgba(255,255,255,.9);
+          position: relative; overflow: hidden; }
+  .card::before { content: ""; position: absolute; inset: 0 0 66% 0; pointer-events: none;
+                  background: linear-gradient(180deg, rgba(255,255,255,.55), rgba(255,255,255,0)); }
+  header { grid-column: 1 / -1; display: flex; align-items: center; gap: 18px; padding: 10px 18px; }
+  .brand { font-weight: 800; font-size: 26px; letter-spacing: -.5px; }
+  .title { font-size: 22px; font-weight: 700; }
+  .sub { color: var(--ink-soft); font-size: 16px; }
+  .chip { display: inline-block; padding: 5px 12px; border-radius: 999px; font-weight: 700; font-size: 14px;
+          background: linear-gradient(180deg, #fff, #e6f4fd); border: 1px solid #c8e5f6; color: #1f5f8b; }
+  .chip.sim { background: #fff7e8; border-color: #f3d9a6; color: #8a5a00; }
+  .chip.off { background: #ffe9e6; border-color: #f4bdb6; color: #a33a36; }
+  .spacer { flex: 1; }
+  .join { display: flex; align-items: center; gap: 10px; font-weight: 700; }
+  #qrSmall { background: #fff; padding: 4px; border-radius: 8px; }
+  #qrSmall img, #qrSmall canvas, #qrBig img, #qrBig canvas { display: block; }
+  a.plus { width: 40px; height: 40px; border-radius: 50%; display: grid; place-items: center; text-decoration: none;
+           color: #fff; font: 300 30px/1 system-ui; background: linear-gradient(180deg, #6fd892, var(--leaf-deep)); }
+
+  /* left column */
+  .left { padding: 16px 18px; display: flex; flex-direction: column; gap: 10px; }
+  .stat .n { font-size: 52px; font-weight: 800; line-height: 1; font-variant-numeric: tabular-nums; }
+  .stat .l { color: var(--ink-soft); font-size: 15px; }
+  .stat.zero .n { font-size: 84px; color: var(--leaf-deep); }
+  h3 { margin: 4px 0 6px; font-size: 13px; letter-spacing: 1.4px; text-transform: uppercase; color: var(--ink-soft); }
+  .locks { display: flex; flex-wrap: wrap; gap: 6px; margin: 4px 0; }
+  .lock { width: 22px; height: 26px; }
+  .budget-line { font-size: 18px; font-weight: 700; }
+  .caption { color: var(--ink-soft); font-size: 13px; }
+
+  /* center */
+  .center { display: grid; place-items: center; padding: 6px; }
+  svg#board { width: 100%; height: 100%; }
+  .line { stroke: rgba(47,155,224,.18); stroke-width: 2; transition: stroke .4s; }
+  .line.hot { stroke: rgba(47,155,224,.85); stroke-width: 3; }
+  .node circle.body { stroke: rgba(255,255,255,.95); stroke-width: 3; transition: fill .4s, opacity .4s; }
+  .node.sim circle.body { stroke: #8fb6cc; stroke-dasharray: 5 4; }
+  .node text.ini { font-weight: 800; fill: var(--ink); text-anchor: middle; dominant-baseline: central; pointer-events: none; }
+  .node text.name { font-size: 14px; font-weight: 700; fill: var(--ink); text-anchor: middle; }
+  .node text.mark { font-size: 15px; font-weight: 800; text-anchor: middle; dominant-baseline: central; }
+  .node.dropped { opacity: .4; } .node.dropped text.name { text-decoration: line-through; }
+  .node.no { opacity: .55; }
+  .topic { font-size: 12px; font-weight: 700; fill: #1f5f8b; }
+  .topicbg { fill: #fff; stroke: #9fd0f3; }
+  .waitring { fill: none; stroke: var(--sky-3); stroke-width: 2; opacity: .6; transform-box: fill-box; transform-origin: center;
+              animation: ping 2s ease-out infinite; }
+  @keyframes ping { from { transform: scale(1); opacity: .7; } to { transform: scale(1.5); opacity: 0; } }
+  .orb { transform-box: fill-box; transform-origin: center; animation: breathe 4s ease-in-out infinite; }
+  @keyframes breathe { 50% { transform: scale(1.04); } }
+  .orb.flash { animation: flash .5s ease-out; }
+  @keyframes flash { 50% { transform: scale(1.12); } }
+  .halo { fill: none; stroke: var(--leaf); stroke-width: 6; opacity: .0; animation: halo 2.2s ease-out; }
+  @keyframes halo { 20% { opacity: .8; } to { opacity: 0; } }
+  .floaty { font-size: 13px; font-weight: 800; fill: var(--leaf-deep); text-anchor: middle; animation: floatup 2.2s ease-out forwards; }
+  @keyframes floatup { to { transform: translateY(-22px); opacity: 0; } }
+
+  /* right column */
+  .right { padding: 16px 18px; overflow: hidden; display: flex; flex-direction: column; gap: 12px; }
+  .need .head { display: flex; justify-content: space-between; font-weight: 800; font-size: 20px; }
+  .bar { height: 14px; border-radius: 999px; background: #e4eef5; overflow: hidden; margin: 6px 0; }
+  .fill { height: 100%; border-radius: 999px; background: linear-gradient(180deg, #8ee0a9, var(--leaf)); transition: width .6s; }
+  .need.short .fill { background: linear-gradient(180deg, #ffd38a, var(--sun)); }
+  .need.short .warn { color: #8a5a00; font-weight: 700; font-size: 14px; }
+  .chain { display: flex; flex-wrap: wrap; gap: 5px; font-size: 14px; }
+  .c { padding: 2px 9px; border-radius: 999px; background: #eef6fb; }
+  .c.providing { background: #d9f7e3; color: var(--leaf-deep); font-weight: 800; }
+  .c.declined { background: #eceff2; color: #6b7c88; text-decoration: line-through; }
+  .c.asking { background: #dcefff; color: #1f5f8b; font-weight: 800; outline: 2px solid #9fd0f3; }
+  .c.na { background: transparent; color: var(--ink-soft); }
+  .cars { display: flex; flex-direction: column; gap: 6px; }
+  .car { display: flex; align-items: center; gap: 6px; }
+  .slot { width: 30px; height: 30px; border-radius: 50%; display: grid; place-items: center; font-size: 12px; font-weight: 800; }
+  .slot.driver { background: var(--leaf); color: #fff; }
+  .slot.rider { background: #d9f7e3; color: var(--leaf-deep); }
+  .slot.empty { border: 2px dashed #b9d6e6; }
+
+  /* ticker */
+  .ticker { grid-column: 1 / -1; padding: 10px 16px; white-space: nowrap; overflow: hidden; font-size: 16px; }
+  .ticker span { margin-right: 26px; cursor: pointer; }
+  .ticker span:first-child { font-weight: 800; }
+  .ticker time { color: var(--ink-soft); font-size: 13px; margin-left: 5px; }
+  .demo { grid-column: 1 / -1; display: none; gap: 8px; align-items: center; padding: 6px 12px; font-size: 13px; }
+  .demo.on { display: flex; }
+  .demo button { font: 700 13px system-ui; padding: 6px 12px; border-radius: 999px; border: 1px solid #c8e5f6; background: #fff; cursor: pointer; }
+  .empty { grid-column: 1 / -1; grid-row: 2 / 4; display: grid; place-items: center; text-align: center; }
+  .empty h1 { font-size: 64px; margin: 0; } .empty p { font-size: 22px; color: var(--ink-soft); }
+  @media (prefers-reduced-motion: reduce) { .bubble, .orb, .waitring { animation: none; } }
 </style>
 <script src="qrcode.min.js"></script>
 </head>
 <body>
-<main id="app"><div class="card empty">no trip yet. tap <b>+</b> to start one</div></main>
-<a class="plus" href="/new" title="New trip" aria-label="New trip">+</a>
+<div id="bubbles"></div>
+<div class="app" id="app">
+  <header class="card">
+    <span class="brand">Roundup</span>
+    <span class="title" id="title"></span><span class="sub" id="sub"></span>
+    <span class="chip" id="status"></span><span class="chip sim" id="simchip" hidden></span><span class="chip off" id="conn" hidden>reconnecting</span>
+    <span class="spacer"></span>
+    <span class="join" id="join"></span>
+    <a class="plus" href="/new" title="New trip">+</a>
+  </header>
+  <section class="card left" id="left"></section>
+  <section class="card center"><svg id="board" viewBox="0 0 640 640" aria-label="switchboard"></svg></section>
+  <section class="card right" id="right"></section>
+  <section class="card ticker" id="ticker"></section>
+  <section class="card demo" id="demo">
+    <b>demo</b>
+    <button data-a="seed">Seed (S)</button><button data-a="crowd">Crowd +12 (C)</button><button data-a="start">Start (G)</button>
+    <button data-a="drop">Drop a driver (D)</button><button data-a="reset">Reset (R)</button><span class="caption">H hides this bar</span>
+  </section>
+</div>
 <script>
-  const esc = (s) => String(s ?? "").replace(/[&<>"]/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" }[c]));
-  const statusLabel = { in: "in", out: "out", maybe: "maybe", waiting: "waiting", opted_out: "opted out" };
-  const markLabel = { providing: "✓", said_no: "✗", asked: "…", not_asked: "" };
-  const tripStatus = { collecting_members: "collecting people", coordinating: "coordinating", finalized: "plan sent" };
-  const time = (t) => new Date(t).toLocaleTimeString([], { hour: "numeric", minute: "2-digit", second: "2-digit" });
+const esc = (s) => String(s ?? "").replace(/[&<>"]/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" }[c]));
+const SVGNS = "http://www.w3.org/2000/svg";
+const reduced = matchMedia("(prefers-reduced-motion: reduce)").matches;
+const C = { x: 320, y: 320 };
+let view = null, prev = null, pos = new Map();
 
-  function render(t) {
-    const app = document.getElementById("app");
-    if (!t) { app.innerHTML = '<div class="card empty">no trip yet. tap <b>+</b> to start one</div>'; return; }
-    const needs = t.needs.length ? t.needs.map((n) => {
-      const pct = n.needed ? Math.min(100, Math.round((n.filled / n.needed) * 100)) : 0;
-      const label = n.kind === "seats" ? `Seats ${n.filled} / ${n.needed}` : `${n.label[0].toUpperCase() + n.label.slice(1)} ${n.filled} / ${n.needed}`;
-      const chain = n.chain.map((c) => `<span class="link ${c.mark}">${esc(c.name)} ${markLabel[c.mark]}</span>`).join('<span class="arrow">→</span>');
-      return `<div class="need ${n.status}"><div class="need-head"><span>${esc(label)}</span><span class="status">${n.status}</span></div>
-        <div class="bar"><div class="fill" style="width:${pct}%"></div></div><div class="chain">${chain}</div></div>`;
-    }).join("") : '<div class="private">needs open once people answer whether they\'re in</div>';
-    const b = t.budget;
-    app.innerHTML = `
-      <header class="card">
-        <div><h1>${esc(t.title)}</h1><div class="sub">${t.dateText ? esc(t.dateText) + " · " : ""}organized by ${esc(t.organizer)} · <span class="status">${tripStatus[t.status]}</span></div></div>
-        <div class="join">${t.joinUrl || t.joinLink ? '<div class="scan">scan with your iPhone camera to join</div><div id="qr"></div>' : ""}${t.joinUrl ? "" : `<div class="code"><small>TEXT TO JOIN</small>join ${esc(t.code)}</div>`}</div>
-      </header>
-      <section class="card" style="grid-column:1/-1"><h2>People</h2><div class="chips">
-        ${t.members.map((m) => `<span class="chip ${m.status}">${esc(m.name)}<span class="s">${statusLabel[m.status]}</span></span>`).join("")}
-      </div></section>
-      <section class="card"><h2>Needs &amp; who's been asked</h2>${needs}</section>
-      <section class="card"><h2>Budget</h2>
-        <div class="budget">${b.answered} of ${b.total} answered</div>
-        <div class="budget" style="color:#1d7a43">${b.groupMax !== null ? `everyone's ok up to $${b.groupMax}` : ""}</div>
-        <div class="private">individual answers stay private. the group number only shows once 2+ people answer.</div>
-      </section>
-      <section class="card" style="grid-column:1/-1"><h2>Live feed</h2><ul class="feed">
-        ${t.feed.map((e) => `<li><time>${time(e.at)}</time><span>${esc(e.text)}</span></li>`).join("")}
-      </ul></section>`;
-    drawQr(t);
-  }
+// background bubbles (CSS only motion)
+for (let i = 0; i < 7; i++) {
+  const b = document.createElement("div"); const s = 60 + Math.random() * 160;
+  Object.assign(b.style, { width: s + "px", height: s + "px", left: Math.random() * 100 + "vw", animationDuration: 30 + Math.random() * 30 + "s", animationDelay: -Math.random() * 40 + "s" });
+  b.className = "bubble"; document.getElementById("bubbles").appendChild(b);
+}
 
-  // The trip link when the website is public (each person gets their own bot number there).
-  // Otherwise SMSTO: opens Messages to the agent with "join CODE" typed (dedicated line only).
-  function drawQr(t) {
-    const el = document.getElementById("qr");
-    if (!el || typeof QRCode === "undefined") return;
-    if (t.joinUrl) {
-      new QRCode(el, { text: t.joinUrl, width: 132, height: 132, correctLevel: QRCode.CorrectLevel.M });
-      return;
+const statusText = { collecting_members: "collecting people", coordinating: "coordinating", finalized: "plan sent" };
+const moodFill = { idle: "#f4fbff", waiting: "#bfe5fb", answered: "#d9f7e3", providing: "#7fd69a", declined: "#e3e8ec", dropped: "#e3e8ec", opted_out: "#d5d9dc" };
+const moodMark = { idle: "", waiting: "…", answered: "✓", providing: "★", declined: "–", dropped: "", opted_out: "×" };
+
+function layout(members) {
+  pos = new Map();
+  const n = members.length, two = n > 12, R = 250;
+  const r = n <= 8 ? 34 : Math.max(22, 34 - (n - 8));
+  members.forEach((m, i) => {
+    const ring = two && i % 2 === 1 ? R * 0.62 : R;
+    const a = (-90 + (i / Math.max(1, n)) * 360) * Math.PI / 180;
+    pos.set(m.id, { x: C.x + ring * Math.cos(a), y: C.y + ring * Math.sin(a), r });
+  });
+}
+
+function el(tag, attrs, parent) {
+  const e = document.createElementNS(SVGNS, tag);
+  for (const [k, v] of Object.entries(attrs || {})) e.setAttribute(k, v);
+  if (parent) parent.appendChild(e);
+  return e;
+}
+
+function drawBoard(v) {
+  const svg = document.getElementById("board");
+  svg.innerHTML = "";
+  layout(v.members);
+  const lines = el("g", {}, svg), nodes = el("g", {}, svg);
+  for (const m of v.members) {
+    const p = pos.get(m.id);
+    el("line", { x1: C.x, y1: C.y, x2: p.x, y2: p.y, class: "line", id: "ln-" + m.id }, lines);
+    const g = el("g", { class: `node ${m.simulated ? "sim" : ""} ${m.mood} ${m.rsvp === "no" ? "no" : ""}`, id: "nd-" + m.id }, nodes);
+    const r = m.rsvp === "no" ? p.r * 0.8 : p.r;
+    if (m.mood === "waiting") el("circle", { cx: p.x, cy: p.y, r, class: "waitring" }, g);
+    el("circle", { cx: p.x, cy: p.y, r, class: "body", fill: moodFill[m.mood] || "#fff" }, g);
+    el("text", { x: p.x, y: p.y, class: "ini", "font-size": Math.round(r * 0.62) }, g).textContent = m.initials;
+    el("text", { x: p.x, y: p.y + r + 17, class: "name" }, g).textContent = m.name + (m.isOrganizer ? " ♛" : "");
+    if (moodMark[m.mood]) el("text", { x: p.x + r * 0.78, y: p.y - r * 0.78, class: "mark", fill: m.mood === "providing" ? "#23884a" : "#1f5f8b" }, g).textContent = moodMark[m.mood];
+    if (m.simulated) el("text", { x: p.x, y: p.y + r + 31, class: "name", "font-size": 11, fill: "#8a5a00" }, g).textContent = "sim";
+    if (m.waitingOn) {
+      const label = m.waitingOn === "budget" ? "budget 🔒" : m.waitingOn;
+      const w = 10 + label.length * 7.2, tx = p.x - w / 2, ty = p.y - r - 30;
+      el("rect", { x: tx, y: ty, width: w, height: 20, rx: 10, class: "topicbg" }, g);
+      el("text", { x: p.x, y: ty + 14, class: "topic", "text-anchor": "middle" }, g).textContent = label;
     }
-    if (!t.joinLink) return;
-    const number = t.joinLink.slice(4, t.joinLink.indexOf("&"));
-    new QRCode(el, { text: `SMSTO:${number}:join ${t.code}`, width: 132, height: 132, correctLevel: QRCode.CorrectLevel.M });
   }
+  // the agent: a glossy orb, or the join QR while people are still joining
+  const defs = el("defs", {}, svg);
+  const grad = el("radialGradient", { id: "orbg", cx: "35%", cy: "30%", r: "75%" }, defs);
+  el("stop", { offset: "0%", "stop-color": "#ffffff" }, grad); el("stop", { offset: "45%", "stop-color": "#8fd0f5" }, grad); el("stop", { offset: "100%", "stop-color": "#2f9be0" }, grad);
+  el("circle", { cx: C.x, cy: C.y, r: 54, fill: "url(#orbg)", class: "orb", id: "orb", stroke: "#fff", "stroke-width": 3 }, svg);
+  el("text", { x: C.x, y: C.y + 2, "text-anchor": "middle", "dominant-baseline": "central", "font-size": 40, "font-weight": 900, fill: "#fff" }, svg).textContent = "R";
+}
 
-  const es = new EventSource("/events");
-  es.onmessage = (e) => render(JSON.parse(e.data));
+// ---------------------------------------------------------------- animations
+function travel(from, to, ms, color, done) {
+  if (reduced) { done && done(); return; }
+  const svg = document.getElementById("board");
+  const dot = el("circle", { r: 7, fill: color, cx: 0, cy: 0 }, svg);
+  const t0 = performance.now();
+  (function step(t) {
+    const k = Math.min(1, (t - t0) / ms);
+    dot.setAttribute("transform", `translate(${from.x + (to.x - from.x) * k},${from.y + (to.y - from.y) * k})`);
+    if (k < 1) requestAnimationFrame(step); else { dot.remove(); done && done(); }
+  })(t0);
+}
+
+function onPulse(p) {
+  const at = pos.get(p.memberId); if (!at) return;
+  const line = document.getElementById("ln-" + p.memberId);
+  if (line) { line.classList.add("hot"); setTimeout(() => line.classList.remove("hot"), 1500); }
+  if (p.direction === "out") travel(C, at, 500, "#2f9be0");
+  else travel(at, C, 500, "#4fbf6b", () => { const o = document.getElementById("orb"); if (!o) return; o.classList.remove("flash"); void o.getBBox(); o.classList.add("flash"); });
+}
+
+function hop(fromId, toId) {
+  const a = pos.get(fromId), b = pos.get(toId); if (!a || !b) return;
+  const svg = document.getElementById("board");
+  // curve around the ring: control point pushed outward from the center
+  const mx = (a.x + b.x) / 2, my = (a.y + b.y) / 2, dx = mx - C.x, dy = my - C.y, d = Math.hypot(dx, dy) || 1;
+  const cx = mx + (dx / d) * 90, cy = my + (dy / d) * 90;
+  const path = el("path", { d: `M${a.x},${a.y} Q${cx},${cy} ${b.x},${b.y}`, fill: "none", stroke: "#ffb84d", "stroke-width": 4, "stroke-linecap": "round", opacity: 0.95 }, svg);
+  path.style.transition = "opacity 3s"; setTimeout(() => (path.style.opacity = 0), 50); setTimeout(() => path.remove(), 3200);
+  if (reduced) return;
+  const len = path.getTotalLength(), dot = el("circle", { r: 8, fill: "#ff9d1a" }, svg), t0 = performance.now();
+  (function step(t) {
+    const k = Math.min(1, (t - t0) / 700), pt = path.getPointAtLength(len * k);
+    dot.setAttribute("transform", `translate(${pt.x},${pt.y})`);
+    if (k < 1) requestAnimationFrame(step); else dot.remove();
+  })(t0);
+}
+
+function notBothered(ids) {
+  const svg = document.getElementById("board");
+  for (const id of ids) {
+    const p = pos.get(id); if (!p) continue;
+    const h = el("circle", { cx: p.x, cy: p.y, r: p.r + 9, class: "halo" }, svg);
+    const t = el("text", { x: p.x, y: p.y - p.r - 12, class: "floaty" }, svg); t.textContent = "not bothered";
+    setTimeout(() => { h.remove(); t.remove(); }, 2300);
+  }
+}
+
+function animateChanges(old, v) {
+  if (!old) return;
+  for (const n of v.needs) {
+    const o = old.needs.find((x) => x.id === n.id); if (!o) continue;
+    const was = o.chain.find((c) => c.result === "asking"), now = n.chain.find((c) => c.result === "asking");
+    if (now && (!was || was.memberId !== now.memberId)) {
+      const from = was ? was.memberId : [...o.chain].reverse().find((c) => c.result !== "asking")?.memberId;
+      if (from && from !== now.memberId) hop(from, now.memberId);
+    }
+    if (n.status === "filled" && o.status !== "filled") notBothered(n.neverAsked);
+  }
+}
+
+// ---------------------------------------------------------------- panels
+function countTo(node, value) {
+  const from = Number(node.dataset.v || 0); node.dataset.v = value;
+  if (reduced || from === value) { node.textContent = value; return; }
+  const t0 = performance.now();
+  (function step(t) { const k = Math.min(1, (t - t0) / 300); node.textContent = Math.round(from + (value - from) * k); if (k < 1) requestAnimationFrame(step); })(t0);
+}
+
+function lockSvg(filled) {
+  return `<svg class="lock" viewBox="0 0 22 26"><path d="M5 11V7a6 6 0 0 1 12 0v4" fill="none" stroke="#456377" stroke-width="2.4"/><rect x="2" y="11" width="18" height="14" rx="4" fill="${filled ? "#4fbf6b" : "#fff"}" stroke="#456377" stroke-width="2"/></svg>`;
+}
+
+function drawLeft(v) {
+  const s = v.stats, left = document.getElementById("left");
+  if (!left.dataset.ready) {
+    left.innerHTML = `
+      <div class="stat"><div class="n" id="s-texts">0</div><div class="l">private texts</div></div>
+      <div class="stat zero"><div class="n">0</div><div class="l">messages in the group chat</div></div>
+      <div class="stat"><div class="n" id="s-nb">0</div><div class="l">people the agent never had to ask</div></div>
+      <div class="stat"><div class="n" id="s-cars" style="font-size:34px">–</div><div class="l" id="s-carsl">cars</div></div>
+      <div><h3>Budget</h3><div class="locks" id="locks"></div><div class="budget-line" id="b-line"></div><div class="caption">individual budgets never leave the private chat</div></div>`;
+    left.dataset.ready = "1";
+  }
+  countTo(document.getElementById("s-texts"), s.privateTexts);
+  countTo(document.getElementById("s-nb"), s.peopleNotBothered);
+  document.getElementById("s-cars").textContent = s.carsOnRoad ? `${s.carsOnRoad} cars` : "–";
+  document.getElementById("s-carsl").textContent = s.carsOnRoad ? `on the road, ${s.carsAvoided} avoided` : "cars sorted as drivers say yes";
+  // padlocks in a fresh random order every render, so none maps to a person
+  const locks = Array.from({ length: v.budget.going }, (_, i) => i < v.budget.answered).sort(() => Math.random() - 0.5);
+  document.getElementById("locks").innerHTML = locks.map(lockSvg).join("");
+  document.getElementById("b-line").textContent = `${v.budget.answered} of ${v.budget.going} answered` +
+    (v.budget.groupCap !== null ? ` · everyone's comfortable up to $${v.budget.groupCap}` : " · group number after 2 answers");
+}
+
+function drawRight(v) {
+  const name = (id) => v.members.find((m) => m.id === id)?.name ?? "?";
+  const ini = (id) => v.members.find((m) => m.id === id)?.initials ?? "?";
+  const needs = v.needs.map((n) => {
+    const pct = n.needed ? Math.min(100, Math.round(n.filled / n.needed * 100)) : 0;
+    const chain = n.chain.map((c) => `<span class="c ${c.result === "no_answer" ? "na" : c.result}">${esc(name(c.memberId))}${c.result === "declined" ? " ✗" : c.result === "providing" ? " ✓" : c.result === "asking" ? " …" : ""}</span>`).join("");
+    const short = n.status === "short" ? `<div class="warn">${n.needed - n.filled} short, organizer notified</div>` : "";
+    return `<div class="need ${n.status}"><div class="head"><span>${esc(n.label)}</span><span>${n.filled} / ${n.needed}</span></div>
+      <div class="bar"><div class="fill" style="width:${pct}%"></div></div>${short}
+      <div class="chain">${chain}${n.neverAsked.length ? `<span class="c na">+${n.neverAsked.length} not asked</span>` : ""}</div></div>`;
+  }).join("") || `<div class="caption">needs open once people say they're in</div>`;
+  const cars = v.cars.length ? `<h3>Cars</h3><div class="cars">${v.cars.map((c) => `<div class="car"><span class="slot driver">${esc(ini(c.driverId))}</span>${
+    Array.from({ length: Math.max(0, c.seats - 1) }, (_, i) => c.riderIds[i] ? `<span class="slot rider">${esc(ini(c.riderIds[i]))}</span>` : `<span class="slot empty"></span>`).join("")}</div>`).join("")}</div>` : "";
+  document.getElementById("right").innerHTML = `<h3>Needs &amp; who's been asked</h3>${needs}${cars}`;
+}
+
+function ago(at) { const s = Math.max(0, Math.round((Date.now() - at) / 1000)); return s < 60 ? s + "s" : Math.round(s / 60) + "m"; }
+function drawTicker(v) {
+  document.getElementById("ticker").innerHTML = v.feed.map((e) => `<span data-m="${esc(e.memberId || "")}">${esc(e.text)}<time>${ago(e.at)}</time></span>`).join("") || `<span class="caption">live feed: things show up here as people answer</span>`;
+}
+document.getElementById("ticker").addEventListener("click", (e) => {
+  const id = e.target.closest("span")?.dataset.m; const g = id && document.getElementById("nd-" + id);
+  if (g) { g.style.transition = "opacity .2s"; g.style.opacity = .3; setTimeout(() => (g.style.opacity = ""), 400); }
+});
+
+let qrFor = null;
+function drawHeader(v) {
+  const t = v.trip;
+  document.getElementById("title").textContent = t ? t.title : "";
+  document.getElementById("sub").textContent = t?.dateText ? `· ${t.dateText}` : "";
+  const st = document.getElementById("status");
+  st.textContent = t ? (t.status === "finalized" ? `plan sent · each one different` : statusText[t.status]) : "";
+  st.hidden = !t;
+  const sims = v.members.filter((m) => m.simulated).length, real = v.members.length - sims;
+  const sc = document.getElementById("simchip"); sc.hidden = !sims; sc.textContent = `${sims} simulated · ${real} real`;
+  const join = document.getElementById("join");
+  if (!t) { join.innerHTML = ""; qrFor = null; return; }
+  if (t.joinLink && qrFor !== t.joinLink) {
+    join.innerHTML = `<span>scan to join</span><div id="qrSmall"></div>`;
+    if (typeof QRCode !== "undefined") new QRCode(document.getElementById("qrSmall"), { text: t.joinLink, width: 64, height: 64, correctLevel: QRCode.CorrectLevel.M });
+    qrFor = t.joinLink;
+  } else if (!t.joinLink) { join.innerHTML = `<span>code: ${esc(t.code)}</span>`; qrFor = null; }
+}
+
+function render(v) {
+  const app = document.getElementById("app");
+  const emptyEl = document.getElementById("emptyState");
+  if (!v.trip) {
+    for (const id of ["left", "right", "ticker"]) document.getElementById(id).style.visibility = "hidden";
+    document.querySelector(".center").style.visibility = "hidden";
+    if (!emptyEl) app.insertAdjacentHTML("beforeend", `<div class="empty" id="emptyState"><div><h1>Roundup</h1><p>an AI that plans your group trip by texting everyone individually,<br>so the group chat doesn't have to.</p><p>tap <b>+</b> to start a trip</p></div></div>`);
+    drawHeader(v); prev = v; return;
+  }
+  emptyEl?.remove();
+  for (const id of ["left", "right", "ticker"]) document.getElementById(id).style.visibility = "";
+  document.querySelector(".center").style.visibility = "";
+  drawHeader(v); drawBoard(v); drawLeft(v); drawRight(v); drawTicker(v);
+  animateChanges(prev, v);
+  prev = v;
+}
+
+// ---------------------------------------------------------------- live connection
+const es = new EventSource("/events");
+es.addEventListener("state", (e) => { document.getElementById("conn").hidden = true; view = JSON.parse(e.data); render(view); });
+es.addEventListener("pulse", (e) => onPulse(JSON.parse(e.data)));
+es.onerror = () => { document.getElementById("conn").hidden = false; };
+setInterval(() => view && drawTicker(view), 5000); // keep the "12s ago" fresh
+
+// ---------------------------------------------------------------- demo bar (this laptop, DEMO_MODE only)
+const demo = document.getElementById("demo");
+fetch("/api/demo/ping", { method: "POST" }).then((r) => { if (r.ok) demo.classList.add("on"); }).catch(() => {});
+async function act(a) {
+  if (a === "reset" && !confirm("Reset everything for the next judge?")) return;
+  const r = await fetch("/api/demo/" + a, { method: "POST" }).catch(() => null);
+  if (r && !r.ok) console.warn("demo action failed", a, await r.text());
+}
+demo.addEventListener("click", (e) => { const a = e.target.dataset.a; if (a) act(a); });
+addEventListener("keydown", (e) => {
+  if (e.target.tagName === "INPUT" || e.metaKey || e.ctrlKey) return;
+  const k = e.key.toLowerCase();
+  if (k === "h") demo.classList.toggle("on");
+  const map = { s: "seed", c: "crowd", g: "start", d: "drop", r: "reset" };
+  if (map[k] && demo.classList.contains("on")) act(map[k]);
+});
 </script>
 </body>
 </html>

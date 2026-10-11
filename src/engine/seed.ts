@@ -22,6 +22,7 @@ export function buildDemoTrip(ctx: Ctx, input: SeedInput): Trip {
   mate.rsvp = "yes";
   mate.budgetCap = 45;
   mate.canDrive = false; // told us earlier: no car
+  for (const m of [org, mate]) if (m.phone.startsWith("sim:")) Object.assign(m, { sim: true, heardFrom: true }); // no phones set: labeled sims
   const trip: Trip = {
     id: `trip_demo_${now}`, code: "BEACH7", title: "Beach day", dateText: "Saturday",
     organizer: org.phone, status: "coordinating",

@@ -18,7 +18,7 @@ import { template } from "../llm/phrase.js";
 import { askIntent, enqueueAsk, itemLabel, resolvePending, sendNextQueued } from "./asks.js";
 import { applyChainAnswer, newNeed, recomputeSeats, releaseCommitments, runChain } from "./chain.js";
 import {
-  type CommandEnv, type WebPerson, addPeople, setDate, createTrip, createWebTrip, greetWebSignup, handleCommand, joinWebTrip, optOut,
+  type CommandEnv, type WebPerson, addPeople, newMember, setDate, createTrip, createWebTrip, greetWebSignup, handleCommand, joinWebTrip, optOut,
   sendTripCreated, welcome,
 } from "./commands.js";
 import { type Ctx, type EngineConfig, isGoing, organizerName, seatsNeed } from "./context.js";
@@ -41,6 +41,8 @@ export interface EngineDeps {
   converse?: Converser;
   /** Optional model that drafts and edits the itinerary (falls back to a plain facts-only version). */
   writeItinerary?: ItineraryWriter;
+  /** Dashboard animation hook: one call per private text in or out (Dashboard.md 4.2). Never gets message text. */
+  onPulse?: (phone: Phone, direction: "in" | "out", topic: string | null) => void;
 }
 
 const HISTORY_KEEP = 12;
@@ -79,6 +81,8 @@ export class Engine {
       const body = text.trim();
       if (!body) return;
       this.remember(phone, "them", body);
+      this.count(phone, "texts");
+      this.deps.onPulse?.(phone, "in", null);
       const trip = this.tripOf(phone);
       const m = trip?.members[phone];
       if (m?.optedOut) return; // stop is permanent: never reply again
@@ -233,6 +237,13 @@ export class Engine {
     };
   }
 
+  private count(phone: Phone, what: "texts" | "questions"): void {
+    const trip = this.tripOf(phone);
+    if (!trip) return;
+    trip.counters ??= { texts: 0, questions: 0 };
+    trip.counters[what] += 1;
+  }
+
   private historyOf(phone: Phone): Turn[] {
     return this.state.history?.[phone] ?? [];
   }
@@ -341,6 +352,53 @@ export class Engine {
       for (const phone of Object.keys(trip.members)) this.state.phoneTrip[phone] = trip.id;
       this.advance(trip);
     });
+  }
+
+  // ---------------------------------------------------------------- demo bar (Dashboard.md 10-11)
+
+  private latestTrip(): Trip | undefined {
+    return Object.values(this.state.trips).sort((a, b) => b.createdAt - a.createdAt)[0];
+  }
+
+  /** Add simulated, labeled crowd members ("sim:N") to the newest trip. They're never texted for real. */
+  addCrowd(names: string[], drives: (phone: Phone) => boolean): Promise<void> {
+    return this.run(async () => {
+      const trip = this.latestTrip();
+      if (!trip) throw new Error("seed or create a trip first");
+      const now = this.ctx.now();
+      let n = Object.keys(trip.members).filter((p) => p.startsWith("sim:")).length;
+      names.forEach((name, i) => {
+        let phone = `sim:${++n}`;
+        while (trip.members[phone]) phone = `sim:${++n}`;
+        const m = newMember(phone, name, now + i);
+        m.sim = true;
+        m.heardFrom = true;
+        m.simDrives = drives(phone);
+        trip.members[phone] = m;
+        this.state.phoneTrip[phone] = trip.id;
+        this.log(trip, "joined", `${name} joined (sim)`);
+        if (trip.status !== "collecting_members") enqueueAsk(this.ctx, trip, m, "rsvp");
+      });
+      this.advance(trip);
+    });
+  }
+
+  /** The organizer texting "start", from the demo bar. */
+  async demoStart(): Promise<void> {
+    const trip = this.latestTrip();
+    if (trip) await this.handleInbound(trip.organizer, "start");
+  }
+
+  /** A driver drops out on cue (a simulated one if possible), to show the rebalance. */
+  async demoDrop(): Promise<string | null> {
+    const trip = this.latestTrip();
+    if (!trip) return null;
+    const seats = seatsNeed(trip);
+    const going = Object.values(trip.members).filter((m) => isGoing(m) && m.phone !== trip.organizer);
+    const pick = going.find((m) => m.sim && seats?.providers.includes(m.phone)) ?? going.find((m) => m.sim) ?? null;
+    if (!pick) return null;
+    await this.handleInbound(pick.phone, "something came up, i can't come anymore sorry");
+    return pick.name;
   }
 
   /** DEMO_MODE: wipe everything. */
@@ -502,6 +560,7 @@ export class Engine {
   /** "i can't come anymore" (spec 9.5). */
   private dropout(trip: Trip, m: Member): void {
     const ctx = this.ctx;
+    m.droppedOut = true;
     m.rsvp = "no";
     m.pendingAsk = null;
     m.askQueue = [];
@@ -636,7 +695,10 @@ export class Engine {
   private queueOut(phone: Phone, intent: MessageIntent): void {
     const m = this.tripOf(phone)?.members[phone];
     if (m?.optedOut && intent.kind !== "stop_confirm") return;
-    if (m && QUESTION_KINDS.has(intent.kind)) m.sentSinceReply += 1;
+    if (m && QUESTION_KINDS.has(intent.kind)) {
+      m.sentSinceReply += 1;
+      this.count(phone, "questions");
+    }
     this.outbox.push({ phone, intent });
   }
 
@@ -679,6 +741,8 @@ export class Engine {
           await this.deps.transport.send(phone, text);
           this.lastSent.set(phone, text);
           this.remember(phone, "bot", text);
+          this.count(phone, "texts");
+          this.deps.onPulse?.(phone, "out", pulseTopic(intent));
         } catch (err) {
           console.error(`[engine] send failed: ${(err as Error).message}`);
           if (intent.kind === "invited") await this.inviteFailed(phone, intent.name);
@@ -772,4 +836,15 @@ export function rsvpCondition(text: string): string | null {
   const c = m[1].replace(/[.!]+$/, "").trim();
   if (c.length < 6 || c.length > 120 || /\$|\bbudget\b|\bbucks\b|\bdollars?\b/i.test(c)) return null;
   return c;
+}
+
+/** The topic word for a pulse (Dashboard.md 4.2): what kind of text it was, never its content. */
+function pulseTopic(i: MessageIntent): string | null {
+  const k = i.kind === "pair" ? i.second.kind : i.kind;
+  if (k === "ask_rsvp") return "rsvp";
+  if (k === "ask_budget") return "budget";
+  if (k === "ask_drive" || k === "ask_seats") return "drive";
+  if (k === "ask_item") return "item";
+  if (k === "ask_poll") return "question";
+  return null;
 }

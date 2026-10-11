@@ -20,6 +20,7 @@ export interface Trip {
   itinerary?: Itinerary | null; // addition: the day plan, drafted from everything the bot collected
   notes?: { name: string; note: string; at: number }[]; // addition: heads-ups members asked us to pass on (organizer-only)
   awaitingPlace?: boolean; // addition: we asked the organizer where they're headed
+  counters?: { texts: number; questions: number }; // addition: private DMs in+out, questions asked (dashboard stats)
 }
 
 /** The day plan: drafted by the bot, edited by the organizer over text, then sent to everyone with a trip page link. */
@@ -61,6 +62,10 @@ export interface Member {
   invited?: boolean; // added by the organizer (contact card or number) rather than joining by code
   heardFrom?: boolean; // they have texted us at least once
   viaLink?: boolean; // signed up on the website (trip link); we greet them when they first text in
+  vid?: string; // public id for the dashboard ("m_x7k2q9"). Random, never derived from the phone.
+  sim?: boolean; // a simulated crowd member (Dashboard.md section 10): always labeled, never texted
+  simDrives?: boolean; // the simulated persona has a car (used only for demo chain ordering)
+  droppedOut?: boolean; // said they can't come after being in
   backupDriver?: boolean; // "i'd rather not but i can if no one else does": asked again only if nobody else can
   backupAsked?: boolean; // we already went back to them once
 }

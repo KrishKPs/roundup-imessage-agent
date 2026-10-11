@@ -12,8 +12,13 @@ export function newMember(phone: Phone, name: string, now: number): Member {
   return {
     phone, name, rsvp: "unknown", budgetCap: null, canDrive: null, seats: null, bringing: [],
     pendingAsk: null, askQueue: [], unclearCount: 0, optedOut: false, joinedAt: now,
-    carHint: false, staleAsk: null, sentSinceReply: 0, lastPlan: null,
+    carHint: false, staleAsk: null, sentSinceReply: 0, lastPlan: null, vid: newVid(),
   };
+}
+
+/** Public dashboard id for a member: random, so it can't be turned back into a phone number. */
+export function newVid(): string {
+  return `m_${Math.random().toString(36).slice(2, 8)}`;
 }
 
 export function makeCode(title: string, taken: Set<string>): string {

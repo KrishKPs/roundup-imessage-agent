@@ -4,7 +4,7 @@ import path from "node:path";
 import { fileURLToPath } from "node:url";
 import express from "express";
 import type { Request, Response } from "express";
-import { publicView } from "../engine/view.js";
+import { currentTrip, toDashboardView } from "./view.js";
 import { tripPage } from "../engine/itinerary.js";
 import type { State, Trip } from "../types.js";
 import { joinLink, normalizePhone, smsLink } from "../util.js";
@@ -16,6 +16,7 @@ export interface DashboardOptions {
   agentNumber?: string;
   onSeed?: (body: Record<string, string>) => Promise<void>;
   onReset?: () => Promise<void>;
+  onDemo?: (action: string, body: Record<string, unknown>) => Promise<unknown>;
   /** Website "+" and trip links. */
   web?: {
     createTrip: (input: { title: string; dateText: string | null; name: string; phone: string }) => Promise<string>;
@@ -40,9 +41,6 @@ function webPhone(v: unknown): string | null {
   return normalizePhone(raw);
 }
 
-export function currentTrip(state: State): Trip | undefined {
-  return Object.values(state.trips).sort((a, b) => b.createdAt - a.createdAt)[0];
-}
 
 export function startDashboard(opts: DashboardOptions) {
   const app = express();
@@ -57,15 +55,12 @@ export function startDashboard(opts: DashboardOptions) {
     return `${req.get("x-forwarded-proto") || req.protocol}://${req.get("host")}`;
   };
 
+  /** The switchboard snapshot (Dashboard.md 4.1). The join QR opens the trip link page (works on the shared pool). */
   const snapshot = () => {
     const trip = currentTrip(opts.getState());
-    if (!trip) return null;
     const base = baseUrl();
-    return {
-      ...publicView(trip),
-      joinLink: opts.agentNumber ? joinLink(opts.agentNumber, trip.code) : null,
-      joinUrl: base && opts.web ? `${base}/j/${trip.code}` : null,
-    };
+    const link = trip ? (base && opts.web ? `${base}/j/${trip.code}` : opts.agentNumber ? joinLink(opts.agentNumber, trip.code) : null) : null;
+    return toDashboardView(trip, { joinLink: link });
   };
 
   // ---- website: create a trip, and the trip link members open
@@ -140,7 +135,7 @@ export function startDashboard(opts: DashboardOptions) {
   app.get("/events", (req, res) => {
     res.set({ "Content-Type": "text/event-stream", "Cache-Control": "no-cache", Connection: "keep-alive" });
     res.flushHeaders();
-    res.write(`data: ${JSON.stringify(snapshot())}\n\n`);
+    res.write(`event: state\ndata: ${JSON.stringify(snapshot())}\n\n`);
     clients.add(res);
     req.on("close", () => clients.delete(res));
   });
@@ -163,6 +158,16 @@ export function startDashboard(opts: DashboardOptions) {
     res.json({ ok: true });
   });
 
+  // Demo bar (Dashboard.md 11): this laptop only, DEMO_MODE only.
+  app.post("/api/demo/:action", async (req, res) => {
+    if (!opts.demoMode || viaTunnel(req) || !opts.onDemo) return res.status(404).end();
+    try {
+      res.json({ ok: true, result: await opts.onDemo(req.params.action, req.body ?? {}) });
+    } catch (err) {
+      res.status(400).json({ error: (err as Error).message });
+    }
+  });
+
   const server = app.listen(opts.port, "127.0.0.1", () => {
     console.log(`[dashboard] trip board at http://localhost:${opts.port}`);
   });
@@ -171,7 +176,12 @@ export function startDashboard(opts: DashboardOptions) {
     server,
     /** Push the latest view to every open board. */
     broadcast() {
-      const data = `data: ${JSON.stringify(snapshot())}\n\n`;
+      const data = `event: state\ndata: ${JSON.stringify(snapshot())}\n\n`;
+      for (const c of clients) c.write(data);
+    },
+    /** One dot of animation: a private text went out to / came in from this member. No content. */
+    pulse(p: { memberId: string; direction: "in" | "out"; topic: string | null; at: number }) {
+      const data = `event: pulse\ndata: ${JSON.stringify(p)}\n\n`;
       for (const c of clients) c.write(data);
     },
   };

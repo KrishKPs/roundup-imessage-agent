@@ -9,6 +9,7 @@ export interface EngineConfig {
   quietToStrangers?: boolean; // local mode on a personal account: ignore non-trip texts from unknown people
   dedicatedLine?: boolean; // one number for everyone, no allowlist: join by link/QR instead of organizer adding people
   tripLink?: (code: string) => string | null; // public trip page URL, when the website is reachable
+  demoChainTarget?: "real"; // demo: ask simulated non-drivers first, then real people, then simulated drivers
 }
 
 export interface Ctx {

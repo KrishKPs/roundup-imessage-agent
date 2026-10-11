@@ -4,6 +4,7 @@ import type { Phone } from "./types.js";
 /** Normalize a phone to E.164. Emails (iMessage can use them) are lowercased and kept as-is. */
 export function normalizePhone(raw: string): Phone {
   const s = raw.trim();
+  if (s.startsWith("sim:")) return s; // simulated crowd member (never a real number)
   if (s.includes("@")) return s.toLowerCase();
   const digits = s.replace(/[^\d]/g, "");
   if (s.startsWith("+")) return `+${digits}`;

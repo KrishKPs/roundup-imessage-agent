@@ -16,8 +16,13 @@ export function newNeed(kind: Need["kind"], label: string, quantityNeeded: numbe
  * Who to ask, in order. Seats: organizer, then anyone who mentioned a car, then by join time.
  * Items: organizer, then by join time, with drivers moved to the back so the work is spread out.
  */
-export function candidateOrder(trip: Trip, need: Need): Phone[] {
+export function candidateOrder(trip: Trip, need: Need, realLast = false): Phone[] {
   const all = byJoin(trip);
+  if (realLast && need.kind === "seats" && all.some((m) => m.sim)) {
+    // Demo (Dashboard.md 10): the chain visibly hops through simulated "no"s and lands on a real phone.
+    const simNo = all.filter((m) => m.sim && !m.simDrives), real = all.filter((m) => !m.sim), simYes = all.filter((m) => m.sim && m.simDrives);
+    return [...simNo, ...real, ...simYes].map((m) => m.phone);
+  }
   const org = all.filter((m) => m.phone === trip.organizer);
   const rest = all.filter((m) => m.phone !== trip.organizer);
   let ordered: Member[];
@@ -49,7 +54,7 @@ export function recomputeSeats(trip: Trip): void {
 }
 
 export function runChain(ctx: Ctx, trip: Trip, need: Need): void {
-  need.candidates = candidateOrder(trip, need);
+  need.candidates = candidateOrder(trip, need, ctx.cfg.demoChainTarget === "real");
 
   if (need.quantityFilled >= need.quantityNeeded && need.quantityNeeded > 0) {
     if (need.waitingOn) {
