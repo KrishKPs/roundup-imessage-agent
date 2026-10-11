@@ -336,6 +336,10 @@ export class Engine {
   tick(): Promise<void> {
     return this.run(async () => {
       for (const trip of Object.values(this.state.trips)) {
+        // People who texted in before "joining = in" existed are in too (no pending question means nothing in flight).
+        for (const m of Object.values(trip.members)) {
+          if (m.heardFrom && m.name && m.rsvp === "unknown" && !m.pendingAsk && m.phone !== trip.organizer) markIn(this.ctx, trip, m);
+        }
         if (trip.status === "collecting_members") {
           checkSilence(this.ctx, trip); // name questions can still go stale
           continue;
