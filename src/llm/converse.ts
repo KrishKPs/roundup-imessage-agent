@@ -19,7 +19,10 @@ export interface ConverseInput {
   history: Turn[];
 }
 
-const organizerActions = ["reply", "ask_everyone", "tell_everyone", "status", "start", "send_plans", "add_items", "set_date"] as const;
+const organizerActions = [
+  "reply", "ask_everyone", "tell_everyone", "status", "start", "send_plans", "add_items", "set_date",
+  "make_itinerary", "edit_itinerary", "send_itinerary", "set_place",
+] as const;
 const memberActions = ["reply", "pass_to_organizer", "tell_organizer"] as const;
 
 const schema = z.object({
@@ -30,6 +33,8 @@ const schema = z.object({
   items: z.array(z.string().max(30)).max(6).nullable().optional(), // add_items
   message: z.string().max(200).nullable().optional(), // tell_everyone
   note: z.string().max(160).nullable().optional(), // pass_to_organizer / tell_organizer: short summary for the organizer
+  change: z.string().max(200).nullable().optional(), // edit_itinerary: what to change
+  place: z.string().max(60).nullable().optional(), // set_place
   date: z.string().max(40).nullable().optional(), // set_date
   reply: z.string().max(300).nullable().optional(),
 });
@@ -45,6 +50,10 @@ function prompt(i: ConverseInput): string {
     ? `- "reply": just answer or chat (questions about the trip, thanks, small talk). If they ask about the answers to their question (e.g. "what time works for everyone?"), work it out from the answers in TRIP FACTS: give the option that fits the most people and who it doesn't work for.
 - "ask_everyone": they want a NEW question asked (works anytime, even before start). Put the question, written TO the person being asked, in "question" (e.g. "does 10am saturday work for you?", "can you bring the tent?"). If they named specific people ("ask Sam...", "check with Maya and Leo..."), put just those first names in "to"; otherwise "to" is null (everyone). Don't re-ask a question that's already been answered; use "reply" with the answers instead.
 - "tell_everyone": they want a note sent (no answer needed). Put it in "message", in their voice, cleaned up (e.g. "bring sunscreen and a towel!"). If they named specific people ("tell Leo..."), put just those first names in "to"; otherwise "to" is null (everyone).
+- "make_itinerary": they want a plan/schedule for the day put together.
+- "edit_itinerary": there's an itinerary draft and they want something changed ("push it an hour later", "add dinner at 6", "we're skipping the hike"). Put the change in "change", in their words.
+- "send_itinerary": they're happy with the itinerary and want it sent to everyone ("looks good", "send it out").
+- "set_place": they said where the trip is ("we're going to Jordan Lake"). Put just the place in "place".
 - "status": they want an update on who's in / what's left.
 - "start": they say everyone's in and want to kick things off.
 - "send_plans": they want to wrap up and send everyone their plans now.
@@ -72,7 +81,7 @@ ${actions}
 Reply style: like a friend texting. lowercase ok. 1-2 short sentences, under 200 characters. at most one emoji, usually none.
 Hard rules: never invent details that aren't in TRIP FACTS (no times, places, prices, names). never reveal anyone's budget except their own. never say you'll do something not in the action list. don't ask them questions (the app asks its own questions at the right time); just answer or acknowledge. don't repeat your last message, and don't greet them again mid-conversation. output only the final text, never notes about it.
 
-Return JSON only: {"action": string, "question": string|null, "to": string[]|null, "items": string[]|null, "date": string|null, "message": string|null, "note": string|null, "reply": string|null}`;
+Return JSON only: {"action": string, "question": string|null, "to": string[]|null, "items": string[]|null, "date": string|null, "message": string|null, "note": string|null, "change": string|null, "place": string|null, "reply": string|null}`;
 }
 
 export function makeConverser(llm: Llm | null): Converser | undefined {

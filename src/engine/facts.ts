@@ -13,6 +13,7 @@ export function factsFor(trip: Trip, me: Member, _ctx: Ctx): string {
   const lines = [
     `trip: ${trip.title}`,
     `date: ${trip.dateText ?? "not set yet"}`,
+    `place: ${trip.place ?? "not set yet"}`,
     `organizer: ${nameOf(trip, trip.organizer)}`,
     `stage: ${trip.status === "collecting_members" ? "people are still joining; the rsvp/budget/ride questions go out when the organizer texts start (the organizer can ask everyone something anytime)" : trip.status === "coordinating" ? "sorting out who's in, rides, and what to bring" : "plans have been sent"}`,
     `going: ${names(people.filter((m) => m.rsvp === "yes"))}`,
@@ -54,6 +55,9 @@ export function factsFor(trip: Trip, me: Member, _ctx: Ctx): string {
       for (const a of answers) lines.push(`  ${a.name} answered: ${a.answer}`);
       if (silent.length) lines.push(`  no answer yet from: ${silent.join(", ")}`);
     }
+    if (trip.itinerary) {
+      lines.push(`itinerary (${trip.itinerary.sentAt ? "sent to everyone" : "draft, only you've seen it"}):\n${trip.itinerary.text}`);
+    } else lines.push("itinerary: not made yet");
     const notIn = people.filter((m) => (m.viaLink || m.invited) && !m.heardFrom);
     if (notIn.length) lines.push(`signed up but haven't texted in yet: ${names(notIn)}`);
   }

@@ -1,0 +1,66 @@
+<!doctype html>
+<!-- The trip page: the plan everyone in the group can open from their text. Names only; no budgets, no numbers. -->
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Trip plan · Roundup</title>
+<link rel="stylesheet" href="/web.css">
+<style>
+  .plan { white-space: pre-wrap; font-size: 18px; line-height: 1.55; margin: 14px 0 0; }
+  .plan .first { font-weight: 800; font-size: 20px; display: block; margin-bottom: 6px; }
+  h2 { margin: 22px 0 8px; font-size: 14px; text-transform: uppercase; letter-spacing: 1.2px; color: var(--muted); }
+  .chips { display: flex; flex-wrap: wrap; gap: 8px; }
+  .chip { padding: 6px 12px; border-radius: 999px; background: #e8f6ee; border: 1px solid #b9e6c9; font-weight: 600; font-size: 15px; }
+  .row { padding: 8px 0; border-bottom: 1px solid #e3eef5; font-size: 16px; }
+  .row:last-child { border-bottom: 0; }
+  .waiting { color: var(--muted); }
+</style>
+</head>
+<body>
+<main class="sheet">
+  <div class="brand">Roundup</div>
+  <section class="card" id="card"><p class="muted">loading…</p></section>
+  <p class="fine">Planned 1:1 over iMessage by Roundup, an AI. This page updates when the plan changes.</p>
+</main>
+<script>
+  const esc = (s) => String(s ?? "").replace(/[&<>"]/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" }[c]));
+  const code = location.pathname.split("/").pop();
+  const card = document.getElementById("card");
+
+  function render(t) {
+    const sub = [t.dateText, t.place].filter(Boolean).map(esc).join(" · ");
+    const plan = t.itinerary
+      ? `<div class="plan">${t.itinerary.split("\n").map((l, i) => i === 0 ? `<span class="first">${esc(l)}</span>` : esc(l)).join("\n")}</div>`
+      : `<p class="waiting">${esc(t.organizer)} is still putting the plan together. check back soon.</p>`;
+    const cars = t.cars.length
+      ? t.cars.map((c) => `<div class="row">🚗 <b>${esc(c.driver)}</b>${c.riders.length ? ` with ${c.riders.map(esc).join(", ")}` : ""}</div>`).join("")
+      : `<div class="row waiting">rides still being sorted</div>`;
+    const bring = t.bring.length
+      ? t.bring.map((b) => `<div class="row">${esc(b.item)}: ${b.who.length ? b.who.map(esc).join(", ") : '<span class="waiting">nobody yet</span>'}</div>`).join("")
+      : "";
+    card.innerHTML = `
+      <p class="eyebrow">organized by ${esc(t.organizer)}</p>
+      <h1>${esc(t.title)}</h1>
+      ${sub ? `<p class="muted">${sub}</p>` : ""}
+      ${plan}
+      <h2>Who's going</h2>
+      <div class="chips">${t.going.map((n) => `<span class="chip">${esc(n)}</span>`).join("") || '<span class="waiting">nobody yet</span>'}</div>
+      <h2>Rides</h2>${cars}
+      ${bring ? `<h2>What to bring</h2>${bring}` : ""}
+      ${t.budget !== null ? `<h2>Budget</h2><div class="row">everyone's comfortable up to $${esc(t.budget)}</div>` : ""}`;
+  }
+
+  async function load() {
+    try {
+      const res = await fetch(`/api/t/${encodeURIComponent(code)}`);
+      const data = await res.json();
+      if (!res.ok) { card.innerHTML = `<p class="err">${esc(data.error)}</p>`; return; }
+      render(data);
+    } catch { /* keep the last version on screen if the network blips */ }
+  }
+  load();
+  setInterval(load, 15000); // the plan can change; pick it up without a reload
+</script>
+</body>
+</html>

@@ -5,6 +5,7 @@ import { fileURLToPath } from "node:url";
 import express from "express";
 import type { Request, Response } from "express";
 import { publicView } from "../engine/view.js";
+import { tripPage } from "../engine/itinerary.js";
 import type { State, Trip } from "../types.js";
 import { joinLink, normalizePhone, smsLink } from "../util.js";
 
@@ -70,6 +71,16 @@ export function startDashboard(opts: DashboardOptions) {
   // ---- website: create a trip, and the trip link members open
   app.get("/new", (_req, res) => {
     res.sendFile(path.join(here, "public", "new.html"));
+  });
+
+  // The trip page anyone in the group can open: the sent itinerary, rides, what to bring. Names only.
+  app.get("/t/:code", (_req, res) => {
+    res.sendFile(path.join(here, "public", "trip.html"));
+  });
+  app.get("/api/t/:code", (req, res) => {
+    const trip = Object.values(opts.getState().trips).find((t) => t.code === req.params.code.toUpperCase());
+    if (!trip) return res.status(404).json({ error: "This trip link doesn't work anymore." });
+    res.json(tripPage(trip));
   });
 
   app.get("/j/:code", (_req, res) => {

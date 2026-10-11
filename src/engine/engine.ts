@@ -6,6 +6,9 @@ import type { TripExtractor } from "../llm/tripRequest.js";
 import { type ConverseInput, type ConverseResult, type Converser, type Turn, replyIsGrounded } from "../llm/converse.js";
 import { keywordParse } from "../llm/understand.js";
 import { factsFor } from "./facts.js";
+import type { ItineraryWriter } from "../llm/itinerary.js";
+import { draftMessage, isMakeItinerary, isSendItinerary, itineraryFacts, parsePlace, sendItinerary, templateItinerary } from "./itinerary.js";
+import { groupBudget } from "./plan.js";
 import { titleFromAnything } from "./intents.js";
 import type { Store } from "../store.js";
 import type { Transport } from "../transport/transport.js";
@@ -36,6 +39,8 @@ export interface EngineDeps {
   extractTrip?: TripExtractor;
   /** Optional Gemini conversation layer for free text (questions, chat, plain-English organizer requests). */
   converse?: Converser;
+  /** Optional model that drafts and edits the itinerary (falls back to a plain facts-only version). */
+  writeItinerary?: ItineraryWriter;
 }
 
 const HISTORY_KEEP = 12;
@@ -98,6 +103,11 @@ export class Engine {
         return;
       }
 
+      if (trip && m && phone === trip.organizer && (await this.itineraryCommand(trip, body))) {
+        this.advance(trip);
+        return;
+      }
+
       const env: CommandEnv = { ctx: this.ctx, state: this.state, resetState: () => this.deps.store.reset() };
       if (handleCommand(env, phone, body)) {
         const t = this.tripOf(phone);
@@ -146,6 +156,74 @@ export class Engine {
     return title;
   }
 
+  // ---------------------------------------------------------------- itinerary
+
+  /** Exact itinerary messages from the organizer. Returns true if handled. */
+  private async itineraryCommand(trip: Trip, body: string): Promise<boolean> {
+    const place = parsePlace(body);
+    if (trip.awaitingPlace) {
+      if (/^(skip|not sure|idk|tbd|no idea|doesn'?t matter|anywhere|undecided)\b/i.test(body)) {
+        trip.awaitingPlace = false;
+        await this.makeItinerary(trip, null);
+        return true;
+      }
+      const reply = place ?? (body.split(/\s+/).length <= 6 && !body.includes("?") && !isSendItinerary(body) ? body.replace(/[.!]+$/, "") : null);
+      if (reply) {
+        await this.setPlace(trip, reply);
+        return true;
+      }
+    }
+    if (place) {
+      await this.setPlace(trip, place);
+      return true;
+    }
+    if (isMakeItinerary(body)) {
+      await this.makeItinerary(trip, null);
+      return true;
+    }
+    if (isSendItinerary(body) && trip.itinerary) {
+      sendItinerary(this.ctx, trip, this.ctx.cfg.tripLink?.(trip.code) ?? null);
+      return true;
+    }
+    return false;
+  }
+
+  private async setPlace(trip: Trip, place: string): Promise<void> {
+    const waiting = trip.awaitingPlace;
+    trip.place = place.slice(0, 60);
+    trip.awaitingPlace = false;
+    this.log(trip, "answered", `${trip.title} is at ${trip.place}`);
+    if (waiting || trip.itinerary) return this.makeItinerary(trip, trip.itinerary ? `the place is now ${trip.place}` : null);
+    this.ctx.out(trip.organizer, { kind: "text", text: `got it, ${trip.title} is at ${trip.place}. text "make the itinerary" whenever you want a plan for the day.` });
+  }
+
+  /** Draft (change = null) or edit the itinerary, then show it to the organizer. */
+  private async makeItinerary(trip: Trip, change: string | null): Promise<void> {
+    const ctx = this.ctx;
+    if (!change && !trip.place && !trip.awaitingPlace && !trip.itinerary) {
+      trip.awaitingPlace = true;
+      ctx.out(trip.organizer, { kind: "text", text: "on it! where are you all headed?" });
+      return;
+    }
+    trip.awaitingPlace = false;
+    const input = {
+      facts: itineraryFacts(trip), draft: change ? trip.itinerary?.text ?? null : null, change,
+      names: Object.values(trip.members).map((x) => x.name).filter(Boolean), budget: groupBudget(trip),
+    };
+    const written = this.deps.writeItinerary ? await this.deps.writeItinerary(input) : null;
+    const text = written ?? (change ? null : templateItinerary(trip));
+    if (!text) {
+      ctx.out(trip.organizer, { kind: "text", text: "sorry, i couldn't make that change. mind saying it another way?" });
+      return;
+    }
+    trip.itinerary = { text, updatedAt: ctx.now(), sentAt: trip.itinerary?.sentAt ?? null };
+    // An edit that moves the day/time ("push it an hour later") moves the trip too, so everyone's own plan agrees.
+    const when = text.split("\n")[0].split(" · ")[1]?.trim();
+    if (change && when && when.length <= 40 && when.toLowerCase() !== trip.dateText?.toLowerCase()) trip.dateText = when.toLowerCase();
+    this.log(trip, "answered", change ? "itinerary updated" : "itinerary drafted");
+    ctx.out(trip.organizer, { kind: "text", text: draftMessage(text, !!change) });
+  }
+
   private prefetched: Promise<ConverseResult | null> | null = null;
 
   private converseInput(trip: Trip, m: Member, text: string): ConverseInput {
@@ -192,6 +270,21 @@ export class Engine {
           if (!res.message) break;
           announce(ctx, trip, cleanNote(res.message), resolveNames(trip, res.to));
           return true;
+        case "make_itinerary":
+          await this.makeItinerary(trip, null);
+          return true;
+        case "edit_itinerary":
+          if (!res.change || !trip.itinerary) break;
+          await this.makeItinerary(trip, res.change);
+          return true;
+        case "send_itinerary":
+          if (!trip.itinerary) break;
+          sendItinerary(ctx, trip, ctx.cfg.tripLink?.(trip.code) ?? null);
+          return true;
+        case "set_place":
+          if (!res.place) break;
+          await this.setPlace(trip, res.place.trim());
+          return true;
         case "status": return handleCommand(env, m.phone, "status");
         case "start": return handleCommand(env, m.phone, "start");
         case "send_plans": return handleCommand(env, m.phone, "plan");
@@ -209,6 +302,8 @@ export class Engine {
       const org = organizerName(trip);
       ctx.out(m.phone, { kind: "text", text: reply ?? (fyi ? `got it, i'll let ${org} know.` : `good question, i'll check with ${org} and get back to you.`) });
       ctx.out(trip.organizer, { kind: "question_organizer", name: m.name || "someone", note: safeNote(res.note, m, facts, text), fyi });
+      const note = safeNote(res.note, m, facts, text);
+      if (fyi && note) (trip.notes ??= []).push({ name: m.name || "someone", note, at: ctx.now() });
       ctx.log(trip, "handoff", `passed ${m.name || "someone"}'s ${fyi ? "note" : "question"} to ${org}`);
       return true;
     }
@@ -314,6 +409,9 @@ export class Engine {
 
     if (parsed.confidence < 0.6 || !answers(ask, parsed)) {
       if (isStale) return this.unprompted(trip, m, parsed, text);
+      // Not an answer, but maybe something else entirely ("fyi i'm allergic to peanuts", "push it an hour later"):
+      // let the conversation layer handle that first; it repeats the open question afterwards.
+      if (parsed.intent !== "answer" && (await this.talk(trip, m, text))) return;
       return this.unclear(trip, m, ask);
     }
     if (isStale) m.staleAsk = null;

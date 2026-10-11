@@ -3,6 +3,7 @@
 import { loadConfig } from "../src/config.js";
 import { Engine } from "../src/engine/engine.js";
 import { makeConverser } from "../src/llm/converse.js";
+import { makeItineraryWriter } from "../src/llm/itinerary.js";
 import { llmName, pickLlm } from "../src/llm/pick.js";
 import { makePhraser } from "../src/llm/phrase.js";
 import { makeUnderstander } from "../src/llm/understand.js";
@@ -21,7 +22,8 @@ const names: Record<string, string> = { "+19195550100": "Krish", "+19195550101":
 transport.onSend = (m) => console.log(`   -> ${names[m.phone]}: ${m.text}`);
 const engine = new Engine({
   store: new Store(null), transport, understand: makeUnderstander(llm), phrase: makePhraser(llm),
-  cfg: { nudgeAfterMs: 120_000, giveUpAfterMs: 240_000, demoMode: true }, converse: makeConverser(llm),
+  cfg: { nudgeAfterMs: 120_000, giveUpAfterMs: 240_000, demoMode: true, tripLink: (c) => `https://example.trycloudflare.com/t/${c}` },
+  converse: makeConverser(llm), writeItinerary: makeItineraryWriter(pickLlm(cfg, 20000)),
 });
 const [krish, sam, maya] = Object.keys(names);
 const say = async (p: string, text: string) => {
@@ -53,3 +55,8 @@ await say(sam, "like 40 bucks max");
 await say(maya, "do we need to bring our own food?");
 await say(maya, "yeah i'm in");
 await say(krish, "how's it looking?");
+await say(maya, "fyi im allergic to peanuts");
+await say(krish, "we're going to Jordan Lake");
+await say(krish, "make the itinerary");
+await say(krish, "push everything an hour later and add a bonfire at sunset");
+await say(krish, "perfect send it");

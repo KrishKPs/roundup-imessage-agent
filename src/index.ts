@@ -8,6 +8,7 @@ import { makePhraser } from "./llm/phrase.js";
 import { makeUnderstander } from "./llm/understand.js";
 import { makeTripExtractor } from "./llm/tripRequest.js";
 import { makeConverser } from "./llm/converse.js";
+import { makeItineraryWriter } from "./llm/itinerary.js";
 import { Store } from "./store.js";
 import type { Transport } from "./transport/transport.js";
 import { startTunnel } from "./tunnel.js";
@@ -39,10 +40,15 @@ const engine = new Engine({
     agentNumber: cfg.AGENT_NUMBER,
     dedicatedLine: cfg.DEDICATED_LINE,
     quietToStrangers: local,
+    tripLink: (code) => {
+      const base = cfg.PUBLIC_URL.replace(/\/$/, "") || tunnel?.url;
+      return base ? `${base}/t/${code}` : null;
+    },
   },
   onChange: () => dashboard?.broadcast(),
   extractTrip: makeTripExtractor(understandLlm),
   converse: makeConverser(pickLlm(cfg, 10000)), // the reply they're waiting for: worth a few more seconds than a canned answer
+  writeItinerary: makeItineraryWriter(pickLlm(cfg, 20000)), // a whole day plan: the organizer will wait a bit longer for this
 });
 
 const tunnel = cfg.TUNNEL && !cfg.PUBLIC_URL ? startTunnel(cfg.PORT) : null;

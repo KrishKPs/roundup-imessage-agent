@@ -16,6 +16,17 @@ export interface Trip {
   startedAt: number | null; // addition: when `start` was sent (drives the seats-chain timeout)
   poll?: Poll | null; // older saves: a single question (moved into `polls` on load)
   polls?: Poll[]; // addition: the organizer's questions ("ask everyone ...", "ask Sam ..."), oldest first
+  place?: string | null; // addition: where they're going (organizer says it; never guessed)
+  itinerary?: Itinerary | null; // addition: the day plan, drafted from everything the bot collected
+  notes?: { name: string; note: string; at: number }[]; // addition: heads-ups members asked us to pass on (organizer-only)
+  awaitingPlace?: boolean; // addition: we asked the organizer where they're headed
+}
+
+/** The day plan: drafted by the bot, edited by the organizer over text, then sent to everyone with a trip page link. */
+export interface Itinerary {
+  text: string; // one line per step, plain text
+  updatedAt: number;
+  sentAt: number | null; // null while it's still a draft only the organizer has seen
 }
 
 /** "ask everyone does 10am saturday work?": asked 1:1, tallied, reported back to the organizer. */
