@@ -2,31 +2,43 @@
 
 **An AI that plans your group trip by texting everyone 1:1 in iMessage, so the group chat doesn't have to.**
 
-Built at HackNC 2026 for the **Photon track**, on Photon's Spectrum (`spectrum-ts`), powered by Claude (Anthropic).
+We built Roundup at HackNC 2026 for the Photon track. It runs on Photon's Spectrum and talks through Claude.
 
-- **Try it:** https://roundup-bot-production.up.railway.app/app (open in Safari on an iPhone, then Share → Add to Home Screen)
-- **Live switchboard:** https://roundup-bot-production.up.railway.app
-- **Demo video:** _add link_
+- **Try it:** https://roundup-bot-production.up.railway.app/app (open it in Safari on your iPhone, then Share → Add to Home Screen)
+- **Watch it work:** https://roundup-bot-production.up.railway.app
 
 ---
 
-## The problem
+## Why we built this
 
-Planning a trip for 15 people in one group chat breaks down fast. Messages get buried, the same question is asked five times, nobody says their real budget in front of everyone, and one person ends up doing all the organizing.
+Every one of us has been in the 15-person group chat for a trip that never quite comes together. Someone asks who's driving, it gets buried under memes, someone asks again two hours later, nobody wants to say "i can only spend $20" in front of everyone, and one person ends up doing all the work.
 
-Roundup moves the logistics out of the group chat. Everyone talks to Roundup privately, Roundup does the coordinating, and the group chat stays fun.
+So we thought: what if the planning happened somewhere else? Everyone talks to one assistant privately, it does the chasing, and the group chat gets to stay fun.
+
+## What it does
+
+**For the organizer:** you create a trip in one form (or one text), share a single link, and you're done chasing people. You can talk to Roundup like a friend:
+
+- "ask Sam if he can bring the tent"
+- "figure out when everyone's free this week"
+- "tell everyone to bring sunscreen"
+- "push it to sunday 11am"
+
+Questions go out to people privately, and you get one summary back, like *"sunday works for all three, Leo's free after 12"*.
+
+**For everyone else:** you tap the link, send one text, and you're in. From then on Roundup texts you privately, one quick question at a time, in a normal human voice:
+
+- what's the most you'd want to spend (only Roundup sees it)
+- any chance you can drive?
+- could you bring the cooler?
+
+**Chained asking, the core idea.** Roundup asks one person if they can drive. If they say no, it asks the next person, and the moment there are enough seats it **stops**. Nobody else gets bothered. The same goes for every item on the list. If someone says "i'd rather not, but i can if nobody else does", they become the backup and only get asked again if it's actually needed.
+
+**The plan.** Roundup asks the organizer a few setup questions (where, when, the vibe) and asks each person what they're hoping to do and anything it should plan around. It drafts the day, the organizer says "yes" or edits it by text, and everyone gets their own plan (their ride, what they're bringing) plus a link to a Plan page and a PDF that's always the latest version.
+
+**When things change**, like someone dropping out or a driver cancelling, Roundup reworks the plan and texts only the people whose plan actually changed.
 
 ## How it works
-
-1. **The organizer creates a trip** with one form or one text. They pick what Roundup should sort out (rides, private budgets, things to bring) and can add details the bot may answer from (leave time, meeting spot).
-2. **They share one link.** Each friend taps it, types their name and number, and sends one pre-written iMessage. Joining means they're in.
-3. **Roundup texts each person privately**, one question at a time, in a casual voice: their max budget (private), whether they can drive, whether they can bring the cooler.
-4. **Chained asking.** Roundup asks one person "any chance you can drive?" If they say no, it asks the next person, and **the moment there are enough seats it stops**. Nobody else is bothered. The same works for every item. Someone who says "i'd rather not, but i can if nobody else does" becomes the backup and is asked again only if no one else can.
-5. **The organizer talks to it in plain English:** "ask Sam if he can bring the tent", "figure out when everyone's free this week", "tell everyone to bring sunscreen", "push it to sunday 11am". Questions go out 1:1 and come back as one summary ("sunday works for all three, Leo's free after 12").
-6. **The plan.** After a short setup interview with the organizer and two optional questions to each member (what they're hoping to do; anything to plan around, which stays private), Roundup drafts the day. The organizer says "yes" or edits by text, and everyone gets their own plan plus a link to the **Plan page** and an always-current **PDF**.
-7. **Things change.** Someone drops out, a driver cancels, the time moves. Roundup reworks the plan and texts only the people whose own plan changed.
-
-## Architecture
 
 ```
 iMessage  <->  Photon Spectrum (spectrum-ts)  <->  transport/spectrum.ts
@@ -39,94 +51,97 @@ iMessage  <->  Photon Spectrum (spectrum-ts)  <->  transport/spectrum.ts
                                         |
                               store (JSON file on a volume)
                                         |
-                  dashboard: switchboard (SSE), Plan page, PDF, create page, phone app (PWA)
+                  web: switchboard (live), Plan page, PDF, create page, phone app (PWA)
 ```
 
-**The design rule: the language model only reads and writes text; code makes every decision.** The engine decides whom to ask next, does all the arithmetic, and decides when a need is filled. Claude turns a free-text reply into validated JSON (`zod`), and turns a structured "say this" instruction into a short, natural text. Every model output is checked in code before it is sent:
+The rule we stuck to: **the AI reads and writes text, the code makes the decisions.** Who gets asked next, the seat math, when a need is filled and who gets which message are all plain deterministic code. Claude only turns a messy reply ("yeah as long as we're back by 8") into structured data, and turns "ask about driving" into a text that sounds like a person.
 
-- no numbers, times, prices or places that aren't in the trip facts
-- the first message always says it's an AI and how to stop
+We also don't trust the model blindly. Every message is checked before it goes out:
+
+- no made-up times, prices or places
+- the first text always says it's an AI and how to stop
 - one question per message
 - budgets never leak
-- the model's notes to itself ("let me fix that") never reach a phone
 
-If the model is slow or fails, keyword parsing and fixed templates take over, so the bot never stalls.
+If the model is slow or down, the bot falls back to keyword parsing and fixed templates, so it never just hangs.
 
-## How Spectrum is used
+## How we use Spectrum
 
-- `Spectrum({ providers: [imessage.config()] })` connects to Photon's cloud iMessage lines. `app.messages` streams every inbound DM.
-- `space.responding(...)` shows the typing indicator while Roundup works on a reply, and `space.send(...)` replies in the same DM.
-- `imessage(app).user(phone)` + `im.space.create(user)` opens 1:1 conversations, `imessage(space).type` keeps it DM-only, and `imessage(message).sender.address` identifies who's texting.
-- **Why DM-first:** Photon's shared-pool lines can't create group chats, and a number must be a registered project user before it can reach the agent. So the website registers each person (via the Photon CLI) when they sign up, routes them to their own pool line, and has them send the first text. One-on-one coordination is the product anyway.
-- A local provider (`@spectrum-ts/imessage-local`) is also supported through the same engine for testing (`IMESSAGE_MODE=local`).
+- `Spectrum({ providers: [imessage.config()] })` connects to Photon's iMessage lines, and `app.messages` streams every incoming text.
+- `space.responding(...)` shows the typing bubble while Roundup thinks, and `space.send(...)` replies in the same chat.
+- `imessage(app).user(phone)` plus `im.space.create(user)` opens 1:1 chats, and `imessage(message).sender.address` tells us who's texting.
+- **Why it's all DMs:** the shared Photon lines can't create group chats, and a number has to be registered before it can reach the agent. So when someone signs up through the trip link, we register them through the Photon CLI, route them to their own line, and have them send the first text. Honestly, 1:1 is the whole point anyway.
 
-## Privacy and safety
+## Privacy
 
-1. **A member's budget is never shown to anyone**, including the organizer, the dashboard, the Plan page and the PDF. Only the group's lowest number is shared, and only after at least two people answer, so nobody can be identified.
-2. **Private needs** (food needs, mobility, timing) are treated like budgets. The planner and the organizer only see counts ("2 vegetarian"), never names.
-3. **Messages are never forwarded between members.** When a member asks something only the organizer can answer, or shares a heads-up, the organizer alone gets a short summary, after the member is told.
-4. **Every first message says it's an AI**, who added them, and how to stop. `stop` is honored immediately and permanently.
-5. **Roundup only texts people who texted it first** (or were added by the organizer).
-6. **The public pages** (switchboard, Plan page, PDF) show first names only: no phone numbers, no message text.
-7. **Crowd mode is labeled.** The switchboard can add simulated members to show 15+ people at once. They are always labeled `sim`, are never texted, and answer with lines from our example conversations.
+We cared about this a lot, because the whole pitch is "say things privately".
 
-There are automated tests for each of these.
+1. **Your budget is never shown to anyone**, not even the organizer. The group only sees the lowest number, and only once at least two people have answered, so nobody can be singled out.
+2. **Things like dietary needs or "i can't do long walks" are private too.** The planner only sees counts ("2 vegetarian"), never names.
+3. **Roundup never forwards one person's messages to another.** If you ask something only the organizer can answer, the organizer gets a short summary, and you're told first.
+4. **The first text always says it's an AI**, and replying `stop` ends it immediately and permanently.
+5. **It only texts people who joined** or were added by the organizer.
+6. **The public pages** (the live board, the Plan page, the PDF) use first names only: no phone numbers, no message text.
+7. **Simulated people on the demo board are always labeled "sim"** and are never texted. We use them to show what a 15-person trip looks like.
+
+Each of these has an automated test.
 
 ## Run it yourself
 
-Requirements: Node 20+.
+You need Node 20 or newer.
 
 ```bash
 git clone https://github.com/KrishKPs/roundup-imessage-agent.git
 cd roundup-imessage-agent
 npm install
-cp .env.example .env    # then fill in the keys below
-npm run dev             # the bot + dashboard on http://localhost:3010
+cp .env.example .env    # fill in your keys
+npm run dev             # bot + web pages on http://localhost:3010
 ```
-
-`.env` keys:
 
 | Key | What it's for |
 |---|---|
-| `SPECTRUM_PROJECT_ID`, `SPECTRUM_PROJECT_SECRET` | Photon project credentials (Photon dashboard → Settings) |
-| `ANTHROPIC_API_KEY`, `ANTHROPIC_MODEL` | Claude; optional, without it the bot uses keywords and fixed templates |
-| `GEMINI_API_KEY`, `GEMINI_MODEL` | alternative model if no Anthropic key |
-| `DEMO_MODE` | enables reset/seed and the demo bar |
-| `TUNNEL` / `PUBLIC_URL` | public address for trip links (free cloudflared tunnel, or a fixed URL) |
-| `IMESSAGE_MODE` | `cloud` (Photon lines) or `local` (this Mac's Messages app) |
+| `SPECTRUM_PROJECT_ID`, `SPECTRUM_PROJECT_SECRET` | your Photon project (Photon dashboard → Settings) |
+| `ANTHROPIC_API_KEY`, `ANTHROPIC_MODEL` | Claude; without it the bot still works with keywords and templates |
+| `DEMO_MODE` | turns on reset/seed and the demo controls |
+| `TUNNEL` / `PUBLIC_URL` | a public address for trip links |
+| `IMESSAGE_MODE` | `cloud` (Photon lines) or `local` (a Mac's Messages app) |
 
-New numbers are registered with `npx photon login` once, after which Roundup registers people automatically.
+Run `npx photon login` once so Roundup can register new numbers.
 
-**No credentials needed for these:**
+**You can try a lot without any keys:**
 
 ```bash
-npm test            # 92 engine tests on a fake transport
-npm run board       # offline switchboard with simulated crowd members: http://localhost:3011
-npm run simulate    # a scripted trip printed in the terminal
-npm run eval        # 46 realistic texts through the real model, graded by code (needs a model key)
+npm test            # 92 tests on the engine with a fake iMessage
+npm run board       # the live board with simulated people: http://localhost:3011
+npm run simulate    # a whole trip printed in your terminal
+npm run eval        # 46 real texts through the model, graded by code (needs a model key)
 ```
 
-**Deploying:** the repo includes a `Dockerfile`, `railway.json` and `fly.toml`. Our live copy runs on Railway with a persistent volume.
+We deploy it on Railway with a persistent volume; the `Dockerfile` and `railway.json` are in the repo.
 
 ## How we built it, and where AI was used
 
-**Our team** came up with the idea and owned the product:
-- **We designed the product and wrote the specs** (`CLAUDE.md`, `Dashboard.md`, the plan spec): the chained-asking algorithm, the "joining means you're in" flow, the private-budget and privacy rules, the organizer controls, the Plan page and the switchboard.
-- **We made every product call:** what to build, what to cut, and how it should sound (we put together the 500 example conversations that set the voice).
-- **We tested it with real people on real phones all night**, and turned what went wrong into fixes and new test cases.
+**What we did:**
+- **We designed the product and wrote the specs** for it (`CLAUDE.md`, `Dashboard.md`, the plan spec): chained asking, "joining means you're in", the privacy rules, the organizer controls, the Plan page and the live board.
+- **We made the product calls:** what to build, what to cut, and how it should sound. We put together 500 example conversations to pin down the voice.
+- **We tested it on real phones with real friends through the night**, and turned every awkward reply into a fix and a test case.
 
 **AI tools we used:**
-- **Claude Code** (Anthropic) was our coding assistant. We directed it to implement the specs, debug against our phone tests, and deploy. It wrote most of the TypeScript in this repo; the commit history credits it as co-author.
-- **Claude Opus 5.5** runs inside the product. It reads free-text replies and rewords messages so they sound human. It never makes decisions: who gets asked, seats, budgets and who gets which text are all deterministic code, and every model output is checked before it's sent.
+- **Claude Code** (Anthropic) was our coding assistant. We had it implement our specs, debug against our phone tests, deploy, and help write the docs. It wrote most of the TypeScript, and the commit history credits it as co-author.
+- **Claude Opus 5.5** runs inside Roundup. It reads replies and rewords messages so they sound human. It never makes decisions; all of that is code.
 
-## Tracks
+## Track
 
-- **Photon:** a multi-person iMessage agent on Spectrum, with real human-in-the-loop collaboration (the organizer approves the plan; members answer privately), context that persists across people and time, an agent that helps without demanding attention (stops asking the moment a need is filled), and safety behaviors (AI disclosure, `stop`, private budgets).
+**Photon:** a multi-person agent on iMessage built with Spectrum.
+- **Real human-in-the-loop:** the organizer approves the plan, and members answer privately.
+- **Memory across people and time:** Roundup remembers who said what and adapts when things change.
+- **Helps without being annoying:** it stops asking the moment a need is filled.
+- **Safety built in:** it says it's an AI, `stop` works, and budgets stay private.
 
 ## What's next
 
-- Posting the final summary into an existing group chat once we have a dedicated Photon line
-- Real place suggestions from a named source (OpenStreetMap) and private votes on options
-- Weather-aware plans, day-of reminders, and "running late" relays to your driver
+- Posting the final plan into your existing group chat once we have a dedicated Photon line
+- Real place suggestions (from OpenStreetMap) and private votes on where to eat
+- Weather-aware plans, day-of reminders, and "running late" texts that go straight to your driver
 - Splitting gas and costs after the trip
-- WhatsApp and other channels through the same Spectrum code
+- WhatsApp and other apps through the same Spectrum code
