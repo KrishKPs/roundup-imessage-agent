@@ -2,7 +2,19 @@
 import type { Member, Trip } from "../types.js";
 import { MAX_UNANSWERED, itemLabel, sendNextQueued } from "./asks.js";
 import type { Ctx } from "./context.js";
-import { reportPollIfDone, syncAttendance } from "./poll.js";
+import { findPoll, reportPollIfDone, syncAttendance } from "./poll.js";
+import { stepQuestion } from "./prefs.js";
+import type { Ask } from "../types.js";
+
+/** The actual question, so a nudge or re-ask never arrives without context ("no rush. say skip" about what?). */
+export function restate(trip: Trip, ask: Ask): string | null {
+  if (ask.topic === "interview" && ask.step) return stepQuestion(trip, ask.step);
+  if (ask.topic === "poll") return findPoll(trip, ask.pollId)?.question ?? null;
+  return null;
+}
+
+/** Optional questions are never nudged: nobody needs a reminder about "anything you're hoping to do?". */
+const NO_NUDGE = new Set(["interview", "interest", "constraint"]);
 
 export function checkSilence(ctx: Ctx, trip: Trip): void {
   const now = ctx.now();
@@ -12,9 +24,9 @@ export function checkSilence(ctx: Ctx, trip: Trip): void {
     const age = now - ask.askedAt;
     if (age >= ctx.cfg.giveUpAfterMs) {
       giveUp(ctx, trip, m);
-    } else if (age >= ctx.cfg.nudgeAfterMs && !ask.nudged) {
+    } else if (age >= ctx.cfg.nudgeAfterMs && !ask.nudged && !NO_NUDGE.has(ask.topic)) {
       ask.nudged = true;
-      ctx.out(m.phone, { kind: "nudge", topic: ask.topic, item: itemLabel(trip, ask), name: m.name });
+      ctx.out(m.phone, { kind: "nudge", topic: ask.topic, item: itemLabel(trip, ask), name: m.name, question: restate(trip, ask) });
       ctx.log(trip, "nudged", `nudged ${m.name || "a new member"}`);
     }
   }

@@ -183,8 +183,8 @@ export type MessageIntent =
   | { kind: "ask_drive"; name: string; trip: string }
   | { kind: "ask_seats"; name: string }
   | { kind: "ask_item"; name: string; item: string; trip: string }
-  | { kind: "reask"; topic: AskTopic; item: string | null }
-  | { kind: "nudge"; topic: AskTopic; item: string | null; name: string }
+  | { kind: "reask"; topic: AskTopic; item: string | null; question?: string | null }
+  | { kind: "nudge"; topic: AskTopic; item: string | null; name: string; question?: string | null }
   | { kind: "ack"; topic: AskTopic; value: "yes" | "no" | "maybe" | "skip" | "done" }
   | { kind: "handoff_member"; organizer: string }
   | { kind: "handoff_organizer"; name: string; topic: AskTopic; item: string | null }

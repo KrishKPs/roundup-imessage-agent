@@ -42,8 +42,8 @@ export function template(i: MessageIntent): string {
     case "ask_drive": return `any chance you can drive for ${i.trip}?`;
     case "ask_seats": return "appreciate that. how many seats, counting you?";
     case "ask_item": return `could you bring a ${i.item}?`;
-    case "reask": return `sorry, didn't catch that. ${SIMPLE_QUESTION[i.topic].replace("it?", i.item ? `a ${i.item}?` : "it?")}`;
-    case "nudge": return `hey ${i.name}, no rush. ${SIMPLE_QUESTION[i.topic].replace("it?", i.item ? `a ${i.item}?` : "it?")}`;
+    case "reask": return `sorry, didn't catch that. ${i.question ?? SIMPLE_QUESTION[i.topic].replace("it?", i.item ? `a ${i.item}?` : "it?")}`;
+    case "nudge": return `hey ${i.name}, no rush. ${i.question ?? SIMPLE_QUESTION[i.topic].replace("it?", i.item ? `a ${i.item}?` : "it?")}`;
     case "ack": return ackText(i.topic, i.value);
     case "handoff_member": return `no worries, i'll have ${i.organizer} follow up with you.`;
     case "handoff_organizer": return `heads up: i couldn't get a clear answer from ${i.name} about ${topicLabel(i.topic, i.item)}. can you check with them?`;

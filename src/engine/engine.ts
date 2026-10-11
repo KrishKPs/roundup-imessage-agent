@@ -25,7 +25,7 @@ import { type Ctx, type EngineConfig, goingMembers, isGoing, organizerName, seat
 import { finalize } from "./plan.js";
 import { type SeedInput, buildDemoTrip } from "./seed.js";
 import { announce, cleanNote, findPoll, recordPollAnswer, resolveNames, startPoll } from "./poll.js";
-import { checkSilence } from "./timers.js";
+import { checkSilence, restate } from "./timers.js";
 import { finishInterview, interviewAnswer, maybeAskPrefs, prefCounts, readConstraints, readInterests } from "./prefs.js";
 
 export interface EngineDeps {
@@ -610,7 +610,7 @@ export class Engine {
     const ctx = this.ctx;
     m.unclearCount += 1;
     if (m.unclearCount < 2) {
-      ctx.out(m.phone, { kind: "reask", topic: ask.topic, item: itemLabel(trip, ask) });
+      ctx.out(m.phone, { kind: "reask", topic: ask.topic, item: itemLabel(trip, ask), question: restate(trip, ask) });
       return;
     }
     const org = organizerName(trip);

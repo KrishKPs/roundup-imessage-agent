@@ -43,6 +43,9 @@ export function startInterview(ctx: Ctx, trip: Trip): void {
   for (const step of todo) enqueueAsk(ctx, trip, org, "interview", null, undefined, step);
 }
 
+/** The setup question on its own (for a re-ask), without the one-time intro. */
+export const stepQuestion = (trip: Trip, step: InterviewStep): string => pick(ASK[step], trip.code + step);
+
 export function interviewQuestion(trip: Trip, step: InterviewStep): string {
   const q = pick(ASK[step], trip.code + step);
   if (trip.prefs?.introSent) return q;

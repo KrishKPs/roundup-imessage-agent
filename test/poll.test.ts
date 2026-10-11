@@ -1,7 +1,7 @@
 // "ask everyone ...": the organizer's question goes out 1:1 and comes back as one tally.
 import { describe, expect, it } from "vitest";
 import { summarizeAnswers } from "../src/engine/poll.js";
-import { GIVE_UP_MS, harness, phoneFor } from "./helpers.js";
+import { GIVE_UP_MS, NUDGE_MS, harness, phoneFor } from "./helpers.js";
 
 async function campTrip() {
   const h = harness();
@@ -87,6 +87,14 @@ describe("organizer asks everyone", () => {
     expect(h.transport.to(leo)).toHaveLength(0);
     await h.say(sam, "yeah i got one");
     expect(h.transport.to(org).at(-1)).toBe('Sam can bring the tent, said "yeah i got one"');
+  });
+
+  it("a nudge repeats the actual question, never a context-free 'no rush'", async () => {
+    const { h, org, sam } = await campTrip();
+    await h.say(org, "ask sam if he can bring the tent");
+    h.clock.t += NUDGE_MS + 1000;
+    await h.engine.tick();
+    expect(h.transport.to(sam).at(-1)).toBe("hey Sam, no rush. can you bring the tent?");
   });
 
   it("ask two people: one summary once both answer; a typo in a name still finds them", async () => {
