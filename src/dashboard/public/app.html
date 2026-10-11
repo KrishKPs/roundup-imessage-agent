@@ -26,7 +26,7 @@
   .row { display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 8px; }
   .row a, .row button { display: grid; place-items: center; gap: 4px; padding: 12px 6px; border-radius: 14px; text-decoration: none;
     font: 700 14px system-ui; color: var(--ink); background: #f2f8fc; border: 1px solid #d6e8f3; cursor: pointer; }
-  .row .ico { font-size: 22px; }
+  .row .ico { width: 24px; height: 24px; stroke: #1f8ae6; fill: none; stroke-width: 2; stroke-linecap: round; stroke-linejoin: round; }
   .newbtn { position: fixed; right: 18px; bottom: calc(18px + env(safe-area-inset-bottom)); width: 64px; height: 64px; border-radius: 50%;
     display: grid; place-items: center; color: #fff; font: 300 40px/1 system-ui; text-decoration: none;
     background: linear-gradient(180deg, #6fd892, #23884a); box-shadow: inset 0 2px 0 rgba(255,255,255,.5), 0 8px 20px rgba(46,168,92,.4); }
@@ -68,9 +68,9 @@
       return `<section class="card trip ${info ? "" : "gone"}">
         <h2>${esc(title)}</h2><p class="when">${esc(when)}${info ? "" : " · not reachable right now"}</p>
         <div class="row">
-          <a href="/?code=${encodeURIComponent(t.code)}"><span class="ico">📡</span>Live</a>
-          <a href="/t/${encodeURIComponent(t.code)}"><span class="ico">🗺️</span>Plan</a>
-          <button data-share="${esc(t.code)}" data-title="${esc(title)}"><span class="ico">🔗</span>Share</button>
+          <a href="/?code=${encodeURIComponent(t.code)}"><svg class="ico" viewBox="0 0 24 24"><path d="M12 12h.01 M8.5 8.5a5 5 0 0 0 0 7 M15.5 8.5a5 5 0 0 1 0 7 M5.6 5.6a9 9 0 0 0 0 12.8 M18.4 5.6a9 9 0 0 1 0 12.8"/></svg>Live</a>
+          <a href="/t/${encodeURIComponent(t.code)}"><svg class="ico" viewBox="0 0 24 24"><path d="M9 4L3 6v14l6-2 6 2 6-2V4l-6 2-6-2z M9 4v14 M15 6v14"/></svg>Plan</a>
+          <button data-share="${esc(t.code)}" data-title="${esc(title)}"><svg class="ico" viewBox="0 0 24 24"><path d="M10 14a4 4 0 0 0 5.7 0l3-3a4 4 0 0 0-5.7-5.7l-1 1 M14 10a4 4 0 0 0-5.7 0l-3 3a4 4 0 0 0 5.7 5.7l1-1"/></svg>Share</button>
         </div></section>`;
     }));
     box.innerHTML = cards.join("");

@@ -89,7 +89,9 @@ export function sendItinerary(ctx: Ctx, trip: Trip, link: string | null): void {
   const it = trip.itinerary;
   if (!it) return;
   const again = it.sentAt !== null;
-  it.sentAt = ctx.now(); // the trip's stage doesn't change: rides etc. can still get sorted, and plans update then
+  it.sentAt = ctx.now();
+  it.version = (it.version ?? 0) + 1;
+  (it.changes ??= []).push({ version: it.version, at: ctx.now(), summary: again ? "plan updated by the organizer" : "first version sent" }); // the trip's stage doesn't change: rides etc. can still get sorted, and plans update then
   const seats = assignSeats(trip);
   const budget = groupBudget(trip);
   const reach = goingMembers(trip).filter((m) => m.phone !== trip.organizer && !m.optedOut && !((m.viaLink || m.invited) && !m.heardFrom));
@@ -109,20 +111,81 @@ export function sendItinerary(ctx: Ctx, trip: Trip, link: string | null): void {
   ctx.log(trip, "finalized", again ? "itinerary updated and re-sent" : `itinerary sent to ${reach.length} people`);
 }
 
+/** One timeline item, parsed from an itinerary line ("12:00 meet at Jordan Lake", "🔥 Sunset: bonfire"). */
+export interface PlanItem {
+  time: string | null;
+  title: string;
+  kind: "meet" | "drive" | "food" | "free" | "activity";
+}
+
+export function itineraryItems(text: string): PlanItem[] {
+  return text.split("\n").slice(1).map((raw) => {
+    // Drop a leading emoji/symbol icon: the page draws its own icons.
+    const line = raw.replace(/^[^\p{L}\p{N}]+/u, "").trim();
+    const m = line.match(/^(\d{1,2}(?::\d{2})?\s?(?:am|pm)?|morning|midday|noon|afternoon|evening|sunset|night)\b[\s:.-]*(.*)$/i);
+    const time = m && m[2] ? m[1].trim() : null;
+    const title = (time ? m![2] : line).replace(/^[:\s-]+/, "").trim() || line;
+    const t = title.toLowerCase();
+    const kind: PlanItem["kind"] = /\b(meet|meeting|pick ?up)\b/.test(t) ? "meet"
+      : /\b(drive|driving|leave|leaving|head (out|home)|rides?|cars?)\b/.test(t) ? "drive"
+      : /\b(lunch|dinner|breakfast|brunch|food|eat|snacks?|grill|bbq|picnic|coffee)\b/.test(t) ? "food"
+      : /\b(free time|hang|chill|relax|breathing room)\b/.test(t) ? "free" : "activity";
+    return { time, title, kind };
+  }).filter((x) => x.title);
+}
+
+/** Days until the trip, only when the date is a real calendar date ("oct 18", "10/18"); null for "saturday". */
+export function daysUntil(dateText: string | null, now: number): number | null {
+  if (!dateText) return null;
+  const t = dateText.toLowerCase();
+  const months = ["jan", "feb", "mar", "apr", "may", "jun", "jul", "aug", "sep", "oct", "nov", "dec"];
+  let month = -1, day = -1;
+  const named = t.match(/\b(jan|feb|mar|apr|may|jun|jul|aug|sep|oct|nov|dec)[a-z]*\.?\s+(\d{1,2})\b/);
+  const slash = t.match(/\b(\d{1,2})\/(\d{1,2})\b/);
+  if (named) { month = months.indexOf(named[1]); day = Number(named[2]); }
+  else if (slash) { month = Number(slash[1]) - 1; day = Number(slash[2]); }
+  if (month < 0 || month > 11 || day < 1 || day > 31) return null;
+  const today = new Date(now); today.setHours(0, 0, 0, 0);
+  let d = new Date(today.getFullYear(), month, day);
+  if (d.getTime() < today.getTime() - 86_400_000) d = new Date(today.getFullYear() + 1, month, day);
+  return Math.round((d.getTime() - today.getTime()) / 86_400_000);
+}
+
+/** Where the trip is, for the progress strip and status chip. */
+export function planStage(trip: Trip): "who" | "rides" | "stops" | "ready" {
+  if (trip.itinerary?.sentAt) return "ready";
+  if (trip.itinerary || trip.status === "finalized") return "stops";
+  if (trip.status === "coordinating") return "rides";
+  return "who";
+}
+
 /** The trip page: safe to show anyone with the link. Names only, no budgets except the group number, no phones. */
-export function tripPage(trip: Trip): Record<string, unknown> {
+export function tripPage(trip: Trip, now = Date.now()): Record<string, unknown> {
   const seats = assignSeats(trip);
   const sent = !!trip.itinerary?.sentAt;
+  const people = Object.values(trip.members).filter((m) => !m.optedOut && m.name);
+  const first = (n: string) => n.split(/\s+/)[0]; // first names only, ever
+  const f = trip.facts ?? {};
+  const seatsNeedNow = trip.needs.find((n) => n.kind === "seats");
   return {
     title: trip.title,
     dateText: trip.dateText,
-    place: trip.place ?? null,
-    organizer: organizerName(trip),
-    going: goingMembers(trip).map((m) => m.name),
-    cars: seats.cars.map((c) => ({ driver: nameOf(trip, c.driver), riders: c.riders.map((p: Phone) => nameOf(trip, p)) })),
-    bring: trip.needs.filter((n) => n.kind === "item").map((n) => ({ item: n.label, who: n.providers.map((p) => nameOf(trip, p)) })),
+    place: f.where || trip.place || null,
+    organizer: first(organizerName(trip)),
+    stage: planStage(trip),
+    daysUntil: daysUntil(trip.dateText, now),
+    going: people.filter((m) => m.rsvp === "yes").map((m) => ({ name: first(m.name), organizer: m.phone === trip.organizer })),
+    maybe: people.filter((m) => m.rsvp === "maybe").map((m) => first(m.name)),
+    cars: seats.cars.map((c) => ({ driver: first(nameOf(trip, c.driver)), seats: c.seats, riders: c.riders.map((p: Phone) => first(nameOf(trip, p))) })),
+    seatsSoFar: seatsNeedNow?.quantityFilled ?? 0,
+    ridesOn: trip.settings?.rides !== false,
+    bring: trip.needs.filter((n) => n.kind === "item").map((n) => ({ item: n.label, who: n.providers.map((p) => first(nameOf(trip, p))) })),
     budget: groupBudget(trip),
+    goodToKnow: { meetAt: f.meetAt || null, leaveAt: f.leaveAt || null, backBy: f.backBy || null, notes: f.notes || null },
     itinerary: sent ? trip.itinerary!.text : null,
+    items: sent ? itineraryItems(trip.itinerary!.text) : [],
+    version: sent ? trip.itinerary!.version ?? 1 : 0,
+    changes: sent ? (trip.itinerary!.changes ?? []).slice(-6).reverse() : [],
     updatedAt: trip.itinerary?.updatedAt ?? null,
   };
 }

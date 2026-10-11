@@ -9,6 +9,7 @@ import type { WebTripInput } from "../engine/commands.js";
 import type { Request, Response } from "express";
 import { currentTrip, toDashboardView } from "./view.js";
 import { tripPage } from "../engine/itinerary.js";
+import { itineraryPdf } from "./pdf.js";
 import type { State, Trip } from "../types.js";
 import { joinLink, normalizePhone, smsLink } from "../util.js";
 
@@ -118,6 +119,22 @@ export function startDashboard(opts: DashboardOptions) {
   app.get("/t/:code", (_req, res) => {
     res.sendFile(path.join(here, "public", "trip.html"));
   });
+  // The itinerary PDF: one link, always the current version (plan.md section 5).
+  app.get("/t/:code/itinerary.pdf", async (req, res) => {
+    const trip = Object.values(opts.getState().trips).find((t) => t.code === req.params.code.toUpperCase());
+    if (!trip) return res.status(404).send("This trip link doesn't work anymore.");
+    try {
+      const page = tripPage(trip);
+      const pdf = await itineraryPdf(trip.code, page as never, `${baseUrl(req)}/t/${trip.code}`);
+      const file = `${trip.title.replace(/[^a-z0-9]+/gi, "-").replace(/^-|-$/g, "").toLowerCase() || "trip"}-itinerary-v${page.version || "draft"}.pdf`;
+      res.set({ "Content-Type": "application/pdf", "Cache-Control": "no-cache", "Content-Disposition": `inline; filename="${file}"` });
+      res.send(pdf);
+    } catch (err) {
+      console.error("[pdf] failed:", (err as Error).message);
+      res.status(500).send("Couldn't make the PDF right now.");
+    }
+  });
+
   app.get("/api/t/:code", (req, res) => {
     const trip = Object.values(opts.getState().trips).find((t) => t.code === req.params.code.toUpperCase());
     if (!trip) return res.status(404).json({ error: "This trip link doesn't work anymore." });

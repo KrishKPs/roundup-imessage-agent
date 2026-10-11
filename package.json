@@ -24,6 +24,7 @@
     "@spectrum-ts/imessage-local": "^12.10.1",
     "dotenv": "^18.0.7",
     "express": "^5.3.0",
+    "pdfkit": "^0.15.0",
     "spectrum-ts": "^12.10.1",
     "zod": "^4.6.5"
   },
@@ -31,6 +32,7 @@
     "@photon-ai/cli": "^2.2.0",
     "@types/express": "^5.0.6",
     "@types/node": "^26.6.5",
+    "@types/pdfkit": "^0.13.5",
     "tsx": "^4.23.15",
     "typescript": "^6.0.3",
     "vitest": "^4.1.11"
