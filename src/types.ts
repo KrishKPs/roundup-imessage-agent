@@ -20,7 +20,8 @@ export interface Trip {
   itinerary?: Itinerary | null; // addition: the day plan, drafted from everything the bot collected
   notes?: { name: string; note: string; at: number }[]; // addition: heads-ups members asked us to pass on (organizer-only)
   awaitingPlace?: boolean; // addition: we asked the organizer where they're headed
-  counters?: { texts: number; questions: number }; // addition: private DMs in+out, questions asked (dashboard stats)
+  counters?: { texts: number; questions: number };
+  pendingJoins?: Phone[]; // addition: people who just joined, announced together on the next tick // addition: private DMs in+out, questions asked (dashboard stats)
 }
 
 /** The day plan: drafted by the bot, edited by the organizer over text, then sent to everyone with a trip page link. */

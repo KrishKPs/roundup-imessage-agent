@@ -62,4 +62,23 @@ describe("from the reference conversations", () => {
     expect(h.transport.to(kai).join(" ")).not.toMatch(/you in for|you coming/);
     expect(h.transport.to(kai).at(-1)).toMatch(/spend/);
   });
+
+  it("tells the organizer and everyone already in when people join, batched per tick", async () => {
+    const h = harness();
+    const org = "+19195551000", sam = "+19195551001", maya = "+19195551002", leo = "+19195551003";
+    await h.say(org, "new trip Lake day on saturday");
+    await h.say(org, "Priya");
+    const code = h.trip().code;
+    await h.say(sam, `join ${code} Sam`);
+    await h.engine.tick();
+    expect(h.transport.to(org).at(-1)).toBe("Sam joined Lake day. 2 in so far");
+    await h.say(maya, `join ${code} Maya`);
+    await h.say(leo, `join ${code} Leo`);
+    await h.engine.tick();
+    expect(h.transport.to(org).at(-1)).toBe("Maya and Leo joined Lake day. 4 in so far");
+    expect(h.transport.to(sam).at(-1)).toBe("Maya and Leo are in for Lake day too");
+    expect(h.transport.to(maya).join(" ")).not.toMatch(/in for Lake day too/); // never about yourself
+    await h.engine.tick();
+    expect(h.transport.to(org).at(-1)).toBe("Maya and Leo joined Lake day. 4 in so far"); // nothing new, no repeat
+  });
 });

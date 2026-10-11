@@ -1,6 +1,6 @@
 // Exact text commands (spec 8), matched in code before any LLM call.
 import type { Member, Phone, State, Trip } from "../types.js";
-import { newId, normalizePhone, parseName } from "../util.js";
+import { listNames, newId, normalizePhone, parseName } from "../util.js";
 import { enqueueAsk } from "./asks.js";
 import { newNeed, releaseCommitments } from "./chain.js";
 import { type Ctx, goingMembers, isGoing, organizerName, seatsNeed } from "./context.js";
@@ -218,6 +218,7 @@ function joinTrip(env: CommandEnv, phone: Phone, code: string, givenName: string
   }
   const name = givenName ?? knownName(state, phone);
   const m = newMember(phone, name, ctx.now());
+  m.heardFrom = true; // they just texted us the code
   trip.members[phone] = m;
   if (name) welcome(ctx, trip, m);
   else enqueueAsk(ctx, trip, m, "name");
@@ -247,6 +248,29 @@ export function markIn(ctx: Ctx, trip: Trip, m: Member): void {
   if (m.rsvp !== "unknown" || m.optedOut) return;
   m.rsvp = "yes";
   ctx.log(trip, "answered", `${m.name || "someone"} is in`);
+  if (m.phone !== trip.organizer && !m.sim) (trip.pendingJoins ??= []).push(m.phone); // announced on the next tick
+}
+
+/**
+ * Tell the organizer and everyone already in who just joined. Joins are collected for a tick (~15 s) and sent as
+ * one text, so 20 people joining doesn't mean 20 texts each. Simulated members are never announced.
+ */
+export function announceJoins(ctx: Ctx, trip: Trip): void {
+  const joined = (trip.pendingJoins ?? []).map((p) => trip.members[p]).filter((m) => m && !m.optedOut && isGoing(m));
+  trip.pendingJoins = [];
+  if (!joined.length) return;
+  const names = joined.length <= 3 ? listNames(joined.map((m) => m.name)) : `${joined.slice(0, 2).map((m) => m.name).join(", ")} and ${joined.length - 2} others`;
+  const going = goingMembers(trip).length;
+  const org = trip.members[trip.organizer];
+  if (org && !org.optedOut && !org.sim) {
+    ctx.out(org.phone, { kind: "text", text: `${names} joined ${trip.title}. ${going} in so far` });
+  }
+  const one = joined.length === 1;
+  for (const m of goingMembers(trip)) {
+    if (m.phone === trip.organizer || m.sim || joined.includes(m) || ((m.viaLink || m.invited) && !m.heardFrom)) continue;
+    ctx.out(m.phone, { kind: "text", text: `${one ? `${names}'s` : `${names} are`} in for ${trip.title} too` });
+  }
+  ctx.log(trip, "joined", `told everyone ${names} joined`);
 }
 
 export function optOut(ctx: Ctx, trip: Trip, m: Member): void {

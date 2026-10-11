@@ -18,7 +18,7 @@ import { template } from "../llm/phrase.js";
 import { askIntent, enqueueAsk, itemLabel, resolvePending, sendNextQueued } from "./asks.js";
 import { applyChainAnswer, newNeed, recomputeSeats, releaseCommitments, runChain } from "./chain.js";
 import {
-  type CommandEnv, type WebPerson, addPeople, markIn, newMember, setDate, createTrip, createWebTrip, greetWebSignup, handleCommand, joinWebTrip, optOut,
+  type CommandEnv, type WebPerson, addPeople, announceJoins, markIn, newMember, setDate, createTrip, createWebTrip, greetWebSignup, handleCommand, joinWebTrip, optOut,
   sendTripCreated, welcome,
 } from "./commands.js";
 import { type Ctx, type EngineConfig, isGoing, organizerName, seatsNeed } from "./context.js";
@@ -340,6 +340,7 @@ export class Engine {
         for (const m of Object.values(trip.members)) {
           if (m.heardFrom && m.name && m.rsvp === "unknown" && !m.pendingAsk && m.phone !== trip.organizer) markIn(this.ctx, trip, m);
         }
+        announceJoins(this.ctx, trip);
         if (trip.status === "collecting_members") {
           checkSilence(this.ctx, trip); // name questions can still go stale
           continue;
