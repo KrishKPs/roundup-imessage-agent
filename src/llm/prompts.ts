@@ -46,8 +46,8 @@ Facts (use only these): ${JSON.stringify(intent)}
 
 Rules: casual and warm, lowercase is fine, like a friend not a form. one message under 140 characters.
 keep the exact meaning. if the draft asks a question, ask that same single question; if it doesn't, don't add one.
-keep "AI" and "stop" if the draft has them. write names and the trip name exactly as given (same capitals).
+keep "AI" and "stop" if the draft has them. output only the final text, never notes or corrections about it.
 don't start the same way as your last message. if you've already greeted them above, don't greet again (no "hey Sam!"). don't repeat their name every time.
-no filler openers like "ok", "next q", "first one", "quick q" unless the draft has them. no commentary or guesses about their situation.
+no commentary or guesses about their situation.
 at most one emoji, usually none. never add details, numbers, or times. reply with only the message text.`;
 }

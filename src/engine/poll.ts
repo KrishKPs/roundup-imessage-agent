@@ -31,7 +31,8 @@ function reachable(trip: Trip, m: Member): boolean {
   return !((m.viaLink || m.invited) && !m.heardFrom);
 }
 
-export function startPoll(ctx: Ctx, trip: Trip, question: string, open = isOpenQuestion(question)): void {
+/** Every organizer question is a conversation: people answer in their own words (no yes/no menus). */
+export function startPoll(ctx: Ctx, trip: Trip, question: string, open = true): void {
   const people = Object.values(trip.members).filter((m) => reachable(trip, m));
   if (!people.length) {
     ctx.out(trip.organizer, { kind: "text", text: "nobody's joined yet, so there's no one to ask. share your link first!" });
@@ -50,7 +51,7 @@ export function startPoll(ctx: Ctx, trip: Trip, question: string, open = isOpenQ
 }
 
 export function recordPollAnswer(ctx: Ctx, trip: Trip, m: Member, ask: Ask, answer: string): void {
-  ctx.out(m.phone, { kind: "text", text: `got it, i'll let ${organizerName(trip)} know.` });
+  ctx.out(m.phone, { kind: "poll_ack", organizer: organizerName(trip), question: trip.poll?.question ?? "", answer });
   const poll = trip.poll;
   if (!poll || poll.id !== ask.pollId) return; // an older question the organizer has since replaced
   poll.answers[m.phone] = answer.trim().slice(0, 200);

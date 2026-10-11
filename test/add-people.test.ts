@@ -28,7 +28,7 @@ describe("organizer adds people", () => {
 
     // start: invitees get the RSVP question like anyone else
     await h.say(org, "let's go");
-    expect(h.transport.to(sam).at(-1)).toMatch(/are you in for Camping trip/);
+    expect(h.transport.to(sam).at(-1)).toMatch(/you in for Camping trip/);
   });
 
   it("typed numbers work too; nameless people are asked their name without a second intro", async () => {

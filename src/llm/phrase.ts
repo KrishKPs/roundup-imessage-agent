@@ -5,17 +5,18 @@ import { summarizeAnswers } from "../engine/poll.js";
 import { clip, joinLink, listNames } from "../util.js";
 import type { Llm } from "./gemini.js";
 import { PHRASE_SYSTEM, phrasePrompt } from "./prompts.js";
+import { soundsLikeMeta } from "./converse.js";
 
 export type Phraser = (intent: MessageIntent, history?: { from: "them" | "bot"; text: string }[]) => Promise<string>;
 
 const SIMPLE_QUESTION: Record<AskTopic, string> = {
   name: "what's your first name?",
-  rsvp: "are you coming? yes, no, or maybe works",
-  budget: "what's the most you'd spend? a number like 50 works, or say skip",
-  drive: "can you drive? yes or no works",
-  seats: "how many seats in your car, including you? just a number",
-  item: "can you bring it? yes or no works",
-  poll: "does it work for you? yes, no, or maybe",
+  rsvp: "are you coming?",
+  budget: "roughly what's the most you'd want to spend? totally fine to skip it",
+  drive: "can you drive?",
+  seats: "how many seats in your car, counting you?",
+  item: "can you bring it?",
+  poll: "what do you think?",
 };
 
 /** The fixed wording for every intent. Used directly, or as the draft for Gemini. */
@@ -33,7 +34,7 @@ export function template(i: MessageIntent): string {
       return i.agentNumber
         ? `${i.organizer} is planning ${i.trip}! tap to join: ${joinLink(i.agentNumber, i.code)} (or text "join ${i.code}" to ${i.agentNumber}). Roundup, an AI, sorts out the details with you 1:1.`
         : `${i.organizer} is planning ${i.trip}! text "join ${i.code}" to this number and Roundup will sort out the details with you 1:1.`;
-    case "ask_rsvp": return `are you in for ${i.trip}${i.date ? ` on ${i.date}` : ""}? yes, no, or maybe`;
+    case "ask_rsvp": return `you in for ${i.trip}${i.date ? ` on ${i.date}` : ""}?`;
     case "ask_budget": return "what's the most you'd want to spend on this trip? stays private, i only share the group's lowest number.";
     case "ask_drive": return `can you drive for ${i.trip}? if yes, how many seats including you?`;
     case "ask_seats": return "nice! how many seats in your car, including you?";
@@ -72,7 +73,9 @@ export function template(i: MessageIntent): string {
     case "people_added": return `added ${listNames(i.names)}, texting them now${i.skipped ? ` (skipped ${i.skipped} already in or opted out)` : ""}. ${i.started ? "they'll get the questions now." : "send more anytime, or say start when everyone's in."}`;
     case "ask_what_planning": return "hey! i'm Roundup, an AI that plans group trips over text. what are you planning, and when? anything works. got a code from a friend? just send it.";
     case "organizer_ready": return `hey ${i.name}! i'm Roundup, an AI planning ${i.trip} with you. share your link in the group chat, then text start when everyone's in.`;
-    case "ask_poll": return i.open ? `quick q from ${i.organizer}: ${i.question}` : `quick q from ${i.organizer}: ${i.question} yes, no, or maybe`;
+    case "ask_poll": return `${i.organizer} wanted to ask you: ${i.question}`;
+    case "poll_ack": return `got it, i'll let ${i.organizer} know.`;
+    case "status_report": return i.text;
     case "poll_report": return summarizeAnswers(i.question, i.open, i.answers, i.silent);
     case "pair": return `${template(i.first)} ${template(i.second)}`;
     case "organizer_help": return `i can ask everyone for you, just text "ask everyone" and your question. or text status, start, or need cooler.`;
@@ -109,6 +112,7 @@ const LLM_OK = new Set<MessageIntent["kind"]>([
   // An ack paired with the next question is still reworded, since the question decides the pair.
   "ask_rsvp", "ask_drive", "ask_item", "ask_budget", "ask_seats", "ask_poll", "nudge", "reask", "drop_ack",
   "waiting_for_start", "all_set", "handoff_member", "organizer_drop", "question_answer", "already_member",
+  "poll_ack", "status_report",
 ]);
 
 export function makePhraser(llm: Llm | null): Phraser {
@@ -116,10 +120,11 @@ export function makePhraser(llm: Llm | null): Phraser {
     const draft = template(intent);
     if (intent.kind === "poll_report") return llm ? summarizePoll(llm, intent, draft) : draft;
     const rewordable = LLM_OK.has(intent.kind) || (intent.kind === "pair" && LLM_OK.has(intent.second.kind));
-    if (!llm || !rewordable) return intent.kind === "text" || intent.kind === "invite_line" ? draft : clip(draft);
+    const long = intent.kind === "text" || intent.kind === "invite_line" || intent.kind === "status_report";
+    if (!llm || !rewordable) return long ? draft : clip(draft);
     try {
-      const out = clip((await llm.generate(phrasePrompt(intent, draft, history), { system: PHRASE_SYSTEM })).trim().replace(/^["']|["']$/g, ""));
-      return isSafeRewrite(draft, out, intent) ? out : clip(draft);
+      const out = clip((await llm.generate(phrasePrompt(intent, draft, history), { system: PHRASE_SYSTEM })).trim().replace(/^["']|["']$/g, ""), long ? 240 : 160);
+      return isSafeRewrite(draft, out, intent) ? out : long ? draft : clip(draft);
     } catch {
       return clip(draft);
     }
@@ -128,7 +133,7 @@ export function makePhraser(llm: Llm | null): Phraser {
 
 /** Reject rewrites that add numbers, drop or add questions, lose the AI disclosure / stop option / trip name. */
 export function isSafeRewrite(draft: string, out: string, intent?: MessageIntent): boolean {
-  if (out.length < 5 || out.includes("\n")) return false;
+  if (out.length < 5 || out.includes("\n") || soundsLikeMeta(out, draft)) return false;
   if (draft.includes("?") !== out.includes("?")) return false;
   if ((out.match(/\?/g) ?? []).length > 1) return false; // one question per message
   if (/\bAI\b/.test(draft) && !/\bAI\b/i.test(out)) return false; // first contact must say it's an AI
@@ -136,12 +141,8 @@ export function isSafeRewrite(draft: string, out: string, intent?: MessageIntent
   const facts = intent?.kind === "pair" ? intent.second : intent;
   const trip = facts && "trip" in facts ? facts.trip : null;
   if (trip && draft.includes(trip) && !out.toLowerCase().includes(trip.toLowerCase())) return false;
-  // Names keep their capitals ("Krish", not "krish").
-  for (const key of ["name", "organizer"] as const) {
-    const v = facts && key in facts ? (facts as Record<string, unknown>)[key] : null;
-    if (typeof v === "string" && v && out.toLowerCase().includes(v.toLowerCase()) && !out.includes(v)) return false;
-  }
-  const draftNums = new Set(draft.match(/\d+/g) ?? []);
+  // (Name capitals are fixed in code before sending: engine fixNames.)
+  const draftNums = new Set([...(draft.match(/\d+/g) ?? []), ...(JSON.stringify(intent ?? {}).match(/\d+/g) ?? [])]); // what they said counts too
   return (out.match(/\d+/g) ?? []).every((n) => draftNums.has(n));
 }
 
@@ -156,12 +157,12 @@ Answers:
 ${answers}
 ${i.silent.length ? `No answer from: ${i.silent.join(", ")}` : "Everyone you asked has answered."}
 
-Write one text (under 300 characters) summarizing the answers like a friend would. ${i.open ? "If there's an option that works for everyone or most people, say it first and name anyone it doesn't work for." : "Give the yes/no count and name the no's."} ${i.silent.length ? "Mention who didn't answer." : ""} Use only what's in the answers. No questions. Casual texting style, lowercase is fine. Reply with only the text.`;
+Write one text (under 300 characters) telling the organizer what people said, like a friend catching them up. If there's an option that works for everyone or most people, lead with it and say who it doesn't work for and why (if they said). Don't give counts or tallies, talk about people. ${i.silent.length ? "Mention who didn't answer." : ""} Use only what's in the answers. No questions. Casual texting style, lowercase is fine. Reply with only the text.`;
   try {
     const out = clip((await llm.generate(prompt)).trim().replace(/^["']|["']$/g, ""), 320);
     const known = new Set(`${i.question} ${answers}`.match(/\d+/g) ?? []);
     const grounded = (out.match(/\d+/g) ?? []).every((n) => known.has(n) || Number(n) === i.answers.length || Number(n) === i.silent.length);
-    return grounded && out.length > 10 ? out : draft;
+    return grounded && out.length > 10 && !soundsLikeMeta(out) ? out : draft;
   } catch {
     return draft;
   }

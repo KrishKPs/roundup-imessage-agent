@@ -290,7 +290,7 @@ export class Engine {
 
     // An open question from the organizer ("which days are you free?"): their words are the answer.
     if (ask?.topic === "poll" && trip.poll?.open && ask.pollId === trip.poll.id && !/\?\s*$/.test(text)
-        && keywordParse(text, null).intent !== "drop") {
+        && !/\b(can'?t (come|make it) anymore|not (coming|going) anymore|i'?m out\b|drop(ping)? out|have to bail|gotta bail)/i.test(text)) {
       recordPollAnswer(this.ctx, trip, m, ask, text);
       if (!isStale) resolvePending(this.ctx, trip, m);
       else m.staleAsk = null;

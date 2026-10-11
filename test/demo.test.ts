@@ -14,7 +14,7 @@ describe("demo script", () => {
     await h.say(judge, "join BEACH7");
     expect(h.transport.to(judge)[0]).toMatch(/AI helping Priya plan Beach day/);
     await h.say(judge, "Alex");
-    expect(h.transport.to(judge).join(" ")).toMatch(/hey Alex!.*are you in/);
+    expect(h.transport.to(judge).join(" ")).toMatch(/hey Alex!.*you in/);
     await h.say(judge, "yes!");
     await h.say(judge, "30");
 

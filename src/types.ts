@@ -145,6 +145,8 @@ export type MessageIntent =
   | { kind: "ask_what_planning" }
   | { kind: "organizer_ready"; name: string; trip: string }
   | { kind: "ask_poll"; organizer: string; question: string; open: boolean }
+  | { kind: "poll_ack"; organizer: string; question: string; answer: string } // thanks for answering, reacting to what they said
+  | { kind: "status_report"; text: string } // the plain status line, reworded into a normal text
   | { kind: "poll_report"; question: string; open: boolean; answers: { name: string; answer: string }[]; silent: string[] }
   | { kind: "organizer_help" }
   | { kind: "pair"; first: MessageIntent; second: MessageIntent }; // a quick ack + the next message, sent as one text

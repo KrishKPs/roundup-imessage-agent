@@ -136,7 +136,7 @@ export function handleCommand(env: CommandEnv, phone: Phone, text: string): bool
   }
 
   if (verb === "status") {
-    ctx.out(phone, { kind: "text", text: statusText(trip) });
+    ctx.out(phone, { kind: "status_report", text: statusText(trip) });
     return true;
   }
 

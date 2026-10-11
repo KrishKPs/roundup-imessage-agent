@@ -69,7 +69,7 @@ Pick exactly one action:
 ${actions}
 
 Reply style: like a friend texting. lowercase ok. 1-2 short sentences, under 200 characters. at most one emoji, usually none.
-Hard rules: never invent details that aren't in TRIP FACTS (no times, places, prices, names). never reveal anyone's budget except their own. never say you'll do something not in the action list. don't ask them questions (the app asks its own questions at the right time); just answer or acknowledge. don't repeat your last message, and don't greet them again mid-conversation. write names and the trip name exactly as given.
+Hard rules: never invent details that aren't in TRIP FACTS (no times, places, prices, names). never reveal anyone's budget except their own. never say you'll do something not in the action list. don't ask them questions (the app asks its own questions at the right time); just answer or acknowledge. don't repeat your last message, and don't greet them again mid-conversation. output only the final text, never notes about it.
 
 Return JSON only: {"action": string, "question": string|null, "open": boolean|null, "items": string[]|null, "date": string|null, "message": string|null, "note": string|null, "reply": string|null}`;
 }
@@ -91,9 +91,19 @@ export function makeConverser(llm: Llm | null): Converser | undefined {
   };
 }
 
+/** The model narrating its own writing ("let me fix", "the draft", "filler") must never reach a phone. */
+export function soundsLikeMeta(text: string, source = ""): boolean {
+  if (/\b(let me (fix|redo|rewrite|try again)|the draft|rewrite|filler|as instructed|capitali[sz]ed?|lowercase|here'?s (the|a) (text|message|reply)|i'?ll rephrase)\b|^(reply|message|text):|\bwait, (need|that|i|no)\b/i.test(text)) return true;
+  if (/"[^"]{1,40}"/.test(text) && !/"/.test(source)) return true; // quoting words at itself
+  // Says the same thing twice (a draft, then a "fixed" draft).
+  const t = text.toLowerCase();
+  for (let i = 0; i + 24 <= t.length; i += 4) if (t.indexOf(t.slice(i, i + 24), i + 24) !== -1) return true;
+  return false;
+}
+
 /** A reply may not introduce numbers that aren't in the facts or their message (no made-up times, prices, seats). */
 export function replyIsGrounded(reply: string, facts: string, text: string): boolean {
   const tripFacts = facts.split("\n").filter((l) => !l.startsWith("now:")).join("\n"); // the clock isn't a trip time
   const known = new Set([...(tripFacts.match(/\d+/g) ?? []), ...(text.match(/\d+/g) ?? [])]);
-  return (reply.match(/\d+/g) ?? []).every((n) => known.has(n)) && reply.trim().length >= 2;
+  return (reply.match(/\d+/g) ?? []).every((n) => known.has(n)) && reply.trim().length >= 2 && !soundsLikeMeta(reply, text);
 }

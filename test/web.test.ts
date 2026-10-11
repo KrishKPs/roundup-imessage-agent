@@ -22,10 +22,10 @@ describe("website trip creation and trip link", () => {
 
     // Maya hasn't texted yet: start skips her, and she gets the RSVP question once she does.
     await h.say(org, "start");
-    expect(h.transport.to(sam).at(-1)).toMatch(/are you in for Beach day/);
+    expect(h.transport.to(sam).at(-1)).toMatch(/you in for Beach day/);
     expect(h.transport.to(maya)).toHaveLength(0);
     await h.say(maya, `hi! i'm Maya, joining Beach day (${code})`);
-    expect(h.transport.to(maya).join(" ")).toMatch(/AI helping Krish.*are you in for Beach day/s);
+    expect(h.transport.to(maya).join(" ")).toMatch(/AI helping Krish.*you in for Beach day/s);
   });
 
   it("unknown codes and opted-out numbers can't join; double sign-up is harmless", async () => {

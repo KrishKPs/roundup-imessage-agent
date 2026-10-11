@@ -4,7 +4,7 @@
 //        npm run eval -- budget  (only cases whose name contains "budget")
 import { loadConfig } from "../src/config.js";
 import { Engine } from "../src/engine/engine.js";
-import { makeConverser } from "../src/llm/converse.js";
+import { makeConverser, soundsLikeMeta } from "../src/llm/converse.js";
 import { llmName, pickLlm } from "../src/llm/pick.js";
 import { makePhraser } from "../src/llm/phrase.js";
 import { makeUnderstander } from "../src/llm/understand.js";
@@ -55,7 +55,7 @@ const CASES: Case[] = [
   // organizer: plain-English requests become the right action
   { name: "org asks who's coming", from: "Krish", text: "whos coming so far", check: (r) => has(r, /Sam/, "didn't name anyone") },
   { name: "org pushes date", from: "Krish", text: "can we push it to next weekend instead", check: (r) => (/next weekend/i.test(r.trip.dateText ?? "") ? null : `date is ${r.trip.dateText}`) },
-  { name: "org yes/no poll", from: "Krish", text: "does sunday morning work for everyone?", check: (r) => (r.trip.poll && !r.trip.poll.open ? null : "no yes/no poll started") },
+  { name: "org poll", from: "Krish", text: "does sunday morning work for everyone?", check: (r) => (r.trip.poll ? null : "no question sent") },
   { name: "org open poll", from: "Krish", text: "figure out when everyone's free this week", check: (r) => (r.trip.poll?.open ? null : "no open poll started") },
   { name: "org open poll not suffixed", from: "Krish", text: "ask everyone what snacks they want", check: (r) => (r.others.Sam?.some((t) => /yes, no, or maybe/i.test(t)) ? "open question got yes/no/maybe" : r.trip.poll ? null : "no poll") },
   { name: "org announcement", from: "Krish", text: "tell everyone to bring sunscreen", check: (r) => (r.others.Sam?.some((t) => /sunscreen/i.test(t)) ? null : "Sam didn't get the note") },
@@ -67,6 +67,11 @@ const CASES: Case[] = [
   { name: "org common time", from: "Krish", text: "so what day works for everyone",
     setup: (t) => { t.poll = { id: "p1", question: "which days are you free?", open: true, askedAt: 0, asked: [P.Sam, P.Maya, P.Leo], answers: { [P.Sam]: "sat or sun", [P.Maya]: "only sunday", [P.Leo]: "sunday after 12" }, reported: true }; },
     check: (r) => has(r, /sun/i, "didn't pick sunday") },
+  { name: "org status reads like a text", from: "Krish", text: "status", started: true, check: (r) => lacks(r, /\d+\/\d+/, "stats-style x/y numbers") },
+  { name: "poll answer gets a real reaction", from: "Sam", text: "sat works but i have work till 3",
+    setup: (t) => { t.poll = { id: "p2", question: "which days this weekend work for you?", open: true, askedAt: 0, asked: [P.Sam, P.Maya, P.Leo], answers: {}, reported: false };
+      t.members[P.Sam].pendingAsk = { id: "a2", topic: "poll", needId: null, pollId: "p2", askedAt: 1, nudged: false }; },
+    check: (r) => first(r.trip.poll?.answers[P.Sam] ? null : "answer not saved", has(r, /3|sat/i, "didn't react to what they said")) },
   // members: answered from facts, or passed to the organizer, never invented
   { name: "member who's going", from: "Sam", text: "who else is going", check: (r) => has(r, /Maya|Leo|Krish/, "didn't name anyone") },
   { name: "member date", from: "Sam", text: "wait when is it again", check: (r) => has(r, /saturday/i, "didn't say saturday") },
@@ -133,6 +138,10 @@ async function runCase(c: Case): Promise<{ c: Case; fail: string | null; r: Resu
 
 /** Rules every reply must follow (spec section 8 voice). */
 function voiceIssues(r: Result): string | null {
+  for (const t of [...r.replies, ...Object.values(r.others).flat()]) {
+    if (/yes, no,? or maybe|yes or no works|just a number|a number like/i.test(t ?? "")) return `form-style wording: "${t}"`;
+    if (soundsLikeMeta(t ?? "", "\"")) return `model talked about its own writing: "${t}"`;
+  }
   for (const t of r.replies) {
     if (t.length > 330) return `too long (${t.length})`;
     if ((t.match(/\?/g) ?? []).length > 1) return `more than one question: "${t}"`;

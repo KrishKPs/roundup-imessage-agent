@@ -51,7 +51,7 @@ describe("talking like a person", () => {
     const { transport, org, sam, maya, say } = await setup();
     await say(org, "does 10am saturday work for everyone?", { action: "ask_everyone", question: "does 10am saturday work for you?" });
     expect(transport.to(org)).toEqual(["on it, asking Sam, Maya now. i'll text you once everyone answers."]);
-    expect(transport.to(sam)[0]).toMatch(/quick q from Krish: does 10am saturday work for you\?/);
+    expect(transport.to(sam)[0]).toMatch(/Krish wanted to ask you: does 10am saturday work for you\?/);
     expect(transport.to(maya)).toHaveLength(1);
   });
 
@@ -110,6 +110,18 @@ describe("talking like a person", () => {
     expect(isSafeRewrite(draft, "yo Sam! roundup here, an AI helping Krish with CAMP. text stop to opt out", intent)).toBe(true);
     expect(isSafeRewrite(draft, "yo Sam! helping Krish with CAMP. text stop to opt out", intent)).toBe(false);
     expect(isSafeRewrite(draft, "yo Sam! an AI helping Krish plan the trip, text stop anytime", intent)).toBe(false);
-    expect(isSafeRewrite("are you in? yes or no", "you in? or nah?", undefined)).toBe(false);
+    expect(isSafeRewrite("you in? yes or no", "you in? or nah?", undefined)).toBe(false);
+  });
+
+  it("blocks rewrites where the model narrates its own writing", () => {
+    const draft = "you in for CAMP on sunday?";
+    expect(isSafeRewrite(draft, 'ok you down for CAMP sunday? Wait, "ok" is filler. Let me fix.', { kind: "ask_rsvp", name: "Sam", trip: "CAMP", date: "sunday" })).toBe(false);
+    expect(isSafeRewrite(draft, "you down for CAMP sunday?", { kind: "ask_rsvp", name: "Sam", trip: "CAMP", date: "sunday" })).toBe(true);
+  });
+
+  it("blocks self-corrections and repeated drafts", () => {
+    const i = { kind: "ask_rsvp", name: "Sam", trip: "CAMP", date: "sunday" } as const;
+    expect(isSafeRewrite("you in for CAMP on sunday?", `Krish wants to know if you're down for CAMP sunday wait, need "Krish" capitalized. Krish wants to know if you're down`, i)).toBe(false);
+    expect(isSafeRewrite("you in for CAMP on sunday?", "Krish is kicking things off, you down for CAMP sunday?", i)).toBe(true);
   });
 });
