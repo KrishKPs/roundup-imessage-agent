@@ -120,10 +120,11 @@ const LLM_OK = new Set<MessageIntent["kind"]>([
   "poll_ack", "status_report",
 ]);
 
-export function makePhraser(llm: Llm | null): Phraser {
+/** `reportLlm` (optional, slower timeout) writes poll summaries: nobody is watching a typing bubble for those. */
+export function makePhraser(llm: Llm | null, reportLlm: Llm | null = llm): Phraser {
   return async (intent, history = []) => {
     const draft = template(intent);
-    if (intent.kind === "poll_report") return llm ? summarizePoll(llm, intent, draft) : draft;
+    if (intent.kind === "poll_report") return reportLlm ? summarizePoll(reportLlm, intent, draft) : draft;
     const rewordable = LLM_OK.has(intent.kind) || (intent.kind === "pair" && LLM_OK.has(intent.second.kind));
     const long = intent.kind === "text" || intent.kind === "invite_line" || intent.kind === "status_report";
     if (!llm || !rewordable) return long ? draft : clip(draft);
@@ -157,12 +158,16 @@ export function isSafeRewrite(draft: string, out: string, intent?: MessageIntent
  */
 async function summarizePoll(llm: Llm, i: Extract<MessageIntent, { kind: "poll_report" }>, draft: string): Promise<string> {
   const answers = i.answers.map((a) => `${a.name}: ${a.answer}`).join("\n") || "(nobody answered)";
-  const prompt = `You are Roundup, texting the trip organizer on iMessage. You asked everyone: "${i.question}"
+  const one = i.answers.length + i.silent.length === 1;
+  const how = one
+    ? `Only one person was asked, so keep it short and natural, like "${draft}". Don't mention that they were the only one asked.`
+    : `Under 300 characters. If there's an option that works for everyone or most people, lead with it and say who it doesn't work for and why (if they said). Don't give counts or tallies, talk about people.${i.silent.length ? " Mention who didn't answer." : ""}`;
+  const prompt = `You are Roundup, texting the trip organizer on iMessage. For them, you asked: "${i.question}"
 Answers:
 ${answers}
 ${i.silent.length ? `No answer from: ${i.silent.join(", ")}` : "Everyone you asked has answered."}
 
-Write one text (under 300 characters) telling the organizer what people said, like a friend catching them up. If there's an option that works for everyone or most people, lead with it and say who it doesn't work for and why (if they said). Don't give counts or tallies, talk about people. ${i.silent.length ? "Mention who didn't answer." : ""} Use only what's in the answers. No questions. Casual texting style, lowercase is fine. Reply with only the text.`;
+Write one text telling the organizer what people said, like a friend catching them up. ${how} Use only what's in the answers. If someone answered with just an emoji, say what it means (👍 is a yes, ⛺ to a hiking-or-camping question means camping). Don't quote the question back. No questions. Casual texting style, lowercase is fine. Reply with only the text.`;
   try {
     const out = clip((await llm.generate(prompt)).trim().replace(/^["']|["']$/g, ""), 320);
     const known = new Set(`${i.question} ${answers}`.match(/\d+/g) ?? []);

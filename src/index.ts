@@ -38,7 +38,7 @@ const engine: Engine = new Engine({
   store,
   transport,
   understand: makeUnderstander(understandLlm),
-  phrase: makePhraser(phraseLlm),
+  phrase: makePhraser(phraseLlm, pickLlm(cfg, 10000)), // poll summaries can take a few seconds
   cfg: {
     nudgeAfterMs: cfg.NUDGE_AFTER_SECONDS * 1000,
     giveUpAfterMs: cfg.GIVE_UP_AFTER_SECONDS * 1000,

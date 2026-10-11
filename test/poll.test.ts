@@ -1,5 +1,6 @@
 // "ask everyone ...": the organizer's question goes out 1:1 and comes back as one tally.
 import { describe, expect, it } from "vitest";
+import { summarizeAnswers } from "../src/engine/poll.js";
 import { GIVE_UP_MS, harness, phoneFor } from "./helpers.js";
 
 async function campTrip() {
@@ -29,7 +30,7 @@ describe("organizer asks everyone", () => {
     expect(h.transport.to(org)).toHaveLength(1); // no tally until everyone answers
 
     await h.say(leo, "maybe");
-    expect(h.transport.to(org).at(-1)).toBe('"does 10am Saturday works?" Sam: yes; Maya: nah i can\'t make it that early; Leo: maybe');
+    expect(h.transport.to(org).at(-1)).toBe('heard back on "does 10am Saturday works": Sam said yes, Leo said maybe, Maya said "nah i can\'t make it that early"');
   });
 
   it("reports anyway once quiet people time out", async () => {
@@ -38,7 +39,7 @@ describe("organizer asks everyone", () => {
     await h.say(sam, "yep");
     h.clock.t += GIVE_UP_MS + 1000;
     await h.engine.tick();
-    expect(h.transport.to(org).at(-1)).toBe('"we should rent a canoe?" Sam: yep; no answer from Maya, Leo');
+    expect(h.transport.to(org).at(-1)).toBe('Sam said yes to "we should rent a canoe". no answer from Maya and Leo');
   });
 
   it("the organizer's own free-text questions get organizer help, not the member answer", async () => {
@@ -62,7 +63,7 @@ describe("organizer asks everyone", () => {
     await h.say(maya, "only sunday");
     expect(h.transport.to(maya).at(-1)).toBe("got it, i'll let Krish know");
     await h.say(leo, "sunday morning");
-    expect(h.transport.to(org).at(-1)).toBe('"which days between saturday and tuesday are you free, and what times work best?" Sam: sat after 2 or sunday all day; Maya: only sunday; Leo: sunday morning');
+    expect(h.transport.to(org).at(-1)).toBe('heard back on "which days between saturday and tuesday are you free, and what times work best": Sam said "sat after 2 or sunday all day", Maya said "only sunday", Leo said "sunday morning"');
   });
 
   it("a second question waits its turn, and both get answered and reported", async () => {
@@ -85,7 +86,7 @@ describe("organizer asks everyone", () => {
     expect(h.transport.to(maya)).toHaveLength(0);
     expect(h.transport.to(leo)).toHaveLength(0);
     await h.say(sam, "yeah i got one");
-    expect(h.transport.to(org).at(-1)).toBe('"can you bring the tent?" Sam: yeah i got one');
+    expect(h.transport.to(org).at(-1)).toBe('Sam can bring the tent, said "yeah i got one"');
   });
 
   it("ask two people: one summary once both answer; a typo in a name still finds them", async () => {
@@ -97,7 +98,7 @@ describe("organizer asks everyone", () => {
     await h.say(sam, "5ish");
     expect(h.transport.to(org)).toHaveLength(1);
     await h.say(maya, "around 6");
-    expect(h.transport.to(org).at(-1)).toBe('"what time you get off work?" Sam: 5ish; Maya: around 6');
+    expect(h.transport.to(org).at(-1)).toBe('heard back on "what time you get off work": Sam said "5ish", Maya said "around 6"');
   });
 
   it("tell just Leo: only Leo gets the note", async () => {
@@ -116,7 +117,7 @@ describe("organizer asks everyone", () => {
     await h.say(maya, "sunday too");
     expect(h.transport.to(maya).at(-1)).toBe("Krish wanted to ask you: can you drive?");
     await h.say(maya, "yes i can");
-    expect(h.transport.to(org).join(" | ")).toContain('"can you drive?" Maya: yes i can');
+    expect(h.transport.to(org).join(" | ")).toContain("Maya can drive");
     expect(h.trip().polls!.map((p) => p.reported)).toEqual([false, true]); // Leo hasn't answered the group one
   });
 
@@ -136,5 +137,23 @@ describe("organizer asks everyone", () => {
     await h.say(leo, "Yes I will be there");
     const t = h.trip();
     expect([t.members[sam].rsvp, t.members[maya].rsvp, t.members[leo].rsvp]).toEqual(["yes", "no", "yes"]);
+  });
+});
+
+describe("poll summaries read like a person wrote them", () => {
+  it("one yes to a 'down for' question", () => {
+    expect(summarizeAnswers("would you be down for camping", true, [{ name: "Hasti", answer: "Yes" }], [])).toBe("Hasti's down for camping");
+  });
+  it("one no to a 'can you' question", () => {
+    expect(summarizeAnswers("can you bring the speaker?", true, [{ name: "Sam", answer: "nah" }], [])).toBe("Sam can't bring the speaker");
+  });
+});
+
+describe("emoji and undecided answers", () => {
+  it("a tent emoji to 'hiking or camping' reads as camping", () => {
+    expect(summarizeAnswers("would you be down for hiking or camping?", true, [{ name: "Hasti", answer: "⛺" }], [])).toBe("Hasti picked camping ⛺");
+  });
+  it("a thumbs up is a yes", () => {
+    expect(summarizeAnswers("would you be down for camping", true, [{ name: "Hasti", answer: "👍" }], [])).toBe("Hasti's down for camping");
   });
 });

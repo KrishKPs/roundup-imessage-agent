@@ -1,5 +1,6 @@
 // plan.md tier 2: organizer setup interview, member preferences, draft -> approve -> publish, change notices.
 import { describe, expect, it } from "vitest";
+import { interviewAnswer } from "../src/engine/prefs.js";
 import { Engine } from "../src/engine/engine.js";
 import { tripPage } from "../src/engine/itinerary.js";
 import { makePhraser } from "../src/llm/phrase.js";
@@ -97,5 +98,14 @@ describe("member preferences, draft, publish, changes", () => {
     expect(t().itinerary?.version).toBe(2);
     expect(t().itinerary?.changes?.at(-1)?.summary).toBe("sunset: bonfire");
     expect(transport.to(ORG).at(-1)).toMatch(/^v2 is out: sunset: bonfire/);
+  });
+});
+
+describe("setup interview takes undecided answers", () => {
+  it("'maybe hiking or camping whatever others are comfortable with' is an answer, not a reask", () => {
+    const trip: any = { facts: {}, prefs: {} };
+    expect(interviewAnswer(trip, "where", "Maybe hiking or camping whatever others are comfortable with")).toBe("next");
+    expect(trip.prefs.vibe).toBe("hiking or camping");
+    expect(trip.facts.where).toBeUndefined();
   });
 });

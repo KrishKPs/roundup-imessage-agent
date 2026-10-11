@@ -218,11 +218,62 @@ export function pollSummary(trip: Trip, poll: Poll): string {
   return summarizeAnswers(poll.question, true, answers, silent, poll.reported);
 }
 
-export function summarizeAnswers(question: string, _open: boolean, answers: { name: string; answer: string }[], silent: string[], done = true): string {
-  const quiet = silent.length ? `${done ? "no answer from" : "waiting on"} ${silent.join(", ")}` : "";
-  const lines = answers.map((a) => `${a.name}: ${a.answer}`);
-  return `"${question}" ${[...lines, quiet].filter(Boolean).join("; ")}`;
+const SAID_YES = /^(y|ya|yes+|yeah|yea|yep|yup|sure|ok|okay|k|fine|definitely|absolutely|of course|for sure|i'?m in|im in|count me in|i'?m down|down|totally|bet|sounds good|obviously|100)\b/i;
+const SAID_NO = /^(n|no+|nope|nah|not really|sorry no|no sorry|can'?t|cannot|i can'?t|i'?m out|unfortunately not|pass)\b/i;
+
+/** "would you be down for camping" -> "down for camping"; "can you bring the tent" -> "can bring the tent". */
+function topicOf(question: string): { yes: (who: string) => string; no: (who: string) => string } | null {
+  const q = question.trim().replace(/[?.!]+$/, "").replace(/\byour\b/gi, "their").replace(/\byou\b/gi, "them");
+  let m = q.match(/\b(?:be |are them |r them )?(down (?:for|to) .+)$/i) ?? q.match(/^(?:are them|r them)\s+(in for .+|free .+|coming .+|okay with .+|ok with .+)$/i);
+  if (m) return { yes: (w) => `${w}'s ${m![1]}`, no: (w) => `${w}'s not ${m![1]}` };
+  m = q.match(/^(?:can|could|would|will) them\s+(.+)$/i);
+  if (m) return { yes: (w) => `${w} can ${m![1]}`, no: (w) => `${w} can't ${m![1]}` };
+  return null;
 }
+
+/** What people said, in plain words: "Hasti's down for camping", or "Sam and Leo said yes, Jo said no". */
+export function summarizeAnswers(question: string, _open: boolean, answers: { name: string; answer: string }[], silent: string[], done = true): string {
+  const quiet = silent.length ? `${done ? "no answer from" : "still waiting on"} ${joinNames(silent)}` : "";
+  const q = question.trim().replace(/[?.!]+$/, "");
+  const words = (a: string) => a.trim().split(/\s+/).length;
+  const lean = (a: string) => (emojiMeaning(a, question) === "yes" ? "yes" : emojiMeaning(a, question) === "no" ? "no" : SAID_YES.test(a.trim()) ? "yes" : SAID_NO.test(a.trim()) ? "no" : /^(maybe|idk|not sure|prob(ably)?)\b/i.test(a.trim()) ? "maybe" : "other");
+  const quote = (a: string) => `"${a.trim().replace(/["\s]+$/, "")}"`;
+  if (answers.length === 1) {
+    const { name } = answers[0];
+    let answer = answers[0].answer;
+    const emoji = emojiMeaning(answer, question);
+    if (emoji && emoji !== "yes" && emoji !== "no") return [`${name} picked ${emoji} ${answer.trim()}`, quiet].filter(Boolean).join(". ");
+    if (emoji) answer = emoji;
+    const l = lean(answer);
+    const topic = topicOf(question);
+    let line = l === "yes" || l === "no"
+      ? topic ? (l === "yes" ? topic.yes(name) : topic.no(name)) : `${name} said ${l} to "${q}"`
+      : `${name} says ${quote(answer)}`;
+    if ((l === "yes" || l === "no") && words(answer) > 3) line += `, said ${quote(answer)}`;
+    return [line, quiet].filter(Boolean).join(". ");
+  }
+  const short = (l: string) => answers.filter((a) => lean(a.answer) === l && words(a.answer) <= 3).map((a) => a.name);
+  const said = (names: string[], what: string) => (names.length ? `${joinNames(names)} said ${what}` : "");
+  const other = answers.filter((a) => lean(a.answer) === "other" || words(a.answer) > 3).map((a) => `${a.name} said ${quote(a.answer)}`);
+  const parts = [said(short("yes"), "yes"), said(short("no"), "no"), said(short("maybe"), "maybe"), ...other].filter(Boolean);
+  const head = answers.length ? `heard back on "${q}": ${parts.join(", ")}` : `nobody's answered "${q}" yet`;
+  return [head, quiet].filter(Boolean).join(". ");
+}
+
+const EMOJI_WORDS: [RegExp, string][] = [
+  [/⛺|🏕/u, "camping"], [/🥾|⛰|🏔|🧗/u, "hiking"], [/🏖|🌊|🏝|🏄/u, "the beach"], [/🍕|🍔|🌮|🍜|🍣/u, "food"], [/🚗|🚙/u, "driving"],
+];
+/** An emoji-only answer: "yes" (👍), "no" (👎), a word from the question (⛺ to "hiking or camping" -> "camping"), or null. */
+function emojiMeaning(answer: string, question: string): string | null {
+  const a = answer.trim();
+  if (!a || /[a-z0-9]/i.test(a)) return null;
+  if (/👍|👌|✅|🙌|💯|🔥|❤|😍|🤩|🥳|🙋/u.test(a)) return "yes";
+  if (/👎|❌|🙅|😕|😬/u.test(a)) return "no";
+  const hit = EMOJI_WORDS.find(([re, word]) => re.test(a) && question.toLowerCase().includes(word.replace(/^the /, "").slice(0, 4)));
+  return hit ? hit[1] : null;
+}
+
+const joinNames = (n: string[]) => (n.length <= 1 ? n.join("") : `${n.slice(0, -1).join(", ")} and ${n[n.length - 1]}`);
 
 // ---------------------------------------------------------------- telling
 

@@ -67,7 +67,14 @@ export function interviewAnswer(trip: Trip, step: InterviewStep, raw: string): "
   const lead = lower.replace(/^((so|ok|okay|wait|hey|yo|alright|and|but|also|lol)[,!.\s]+)+/, "");
   if (/\?\s*$/.test(lower) || /^(who|whos|who's|what|whats|what's|when|where|why|how|hows|is|are|did|does|do|can|could|will|would|should|any(one|body)|ask|tell|let'?s|start|send)\b/.test(lead)) return "other";
   if (/\b(lol|lmao|haha|omg|thanks|thank you|ty|everyone'?s (here|in)|kick (it )?off|let'?s go)/.test(lower)) return "other";
-  if (step === "where" && (text.split(/\s+/).length > 5 || /\b(i|we|you|it|this|that|gonna|is|are)\b/.test(lead) && !/^(we'?re |we are )?(going to|headed to|heading to)\b/.test(lead))) return "other";
+  if (step === "where" && (text.split(/\s+/).length > 5 || /\b(i|we|you|it|this|that|gonna|is|are)\b/.test(lead) && !/^(we'?re |we are )?(going to|headed to|heading to)\b/.test(lead))) {
+    // "maybe hiking or camping, whatever others are comfortable with": no place yet, but it's a real answer (the kind of trip).
+    if (!/\b(maybe|whatever|not sure|idk|undecided|open to|flexible|depends|either)\b/i.test(lower)) return "other";
+    const idea = text.replace(/^(maybe|probably|prob|idk|not sure|thinking)[,\s]+/i, "").split(/[,.;]|\b(whatever|depends|idk|not sure|open to|but)\b/i)[0].trim();
+    trip.prefs ??= {};
+    if (idea && !trip.prefs.vibe) trip.prefs.vibe = idea.slice(0, 40);
+    return "next";
+  }
   if (step === "times" && !/\d|noon|midnight|sunrise|sunset|morning|evening/.test(lower)) return "other";
   if (step === "vibe" && text.split(/\s+/).length > 6 && !/\b(chill|relax|active|adventur|food|eat)/.test(lower)) return "other";
   if (step === "pace" && !/\b(pack|full|busy|lots|max|cram|relax|breath|chill|free|loose|easy|room)/.test(lower)) return "other";
