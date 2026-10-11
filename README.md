@@ -110,7 +110,6 @@ npm run eval        # 46 realistic texts through the real model, graded by code 
 
 ## AI usage disclosure
 
-We used AI heavily, and want to be clear about where.
 
 **In the product (what users talk to):**
 - **Claude Opus 5.5 (Anthropic API)** reads members' replies into structured data, rewords fixed messages so they sound human, handles plain-English organizer requests and member questions (choosing from a fixed list of actions, which code then runs), and drafts the itinerary text.
