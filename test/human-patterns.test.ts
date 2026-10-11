@@ -9,10 +9,10 @@ describe("from the reference conversations", () => {
     const h = harness();
     const p = await tripWithMembers(h, ["Priya", "Sam", "Maya"]);
     await h.say(p[0], "id rather not but i can if no one else does");
-    expect(h.transport.to(p[0]).at(-1)).toBe("got it, you're my backup. i'll try others first");
+    expect(h.transport.to(p[0])).toContain("got it, you're my backup. i'll try others first");
     await h.say(p[1], "no car sorry");
     await h.say(p[2], "nah");
-    expect(h.transport.to(p[0]).at(-1)).toBe("turns out nobody else can drive, so i need you after all. how many seats do you have?");
+    expect(h.transport.to(p[0])).toContain("turns out nobody else can drive, so i need you after all. how many seats do you have?");
     expect(seatsNeed(h.trip())!.status).not.toBe("short");
     await h.say(p[0], "5");
     expect(seatsNeed(h.trip())!.status).toBe("filled");

@@ -97,7 +97,8 @@ const CASES: Case[] = [
   { name: "member tries announcement", from: "Maya", text: "tell everyone to bring snacks", check: (r) => nobodyElse(r) },
   // answers to open questions from the bot
   { name: "rsvp slang yes", from: "Sam", text: "bet im down", started: true, check: (r) => (r.trip.members[P.Sam].rsvp === "yes" ? null : `rsvp ${r.trip.members[P.Sam].rsvp}`) },
-  { name: "rsvp with question", from: "Maya", text: "depends who's going", started: true, check: (r) => first(has(r, /Sam|Leo|Krish/, "didn't say who's going"), r.trip.members[P.Maya].rsvp === "unknown" ? null : "guessed an rsvp") },
+  { name: "rsvp with question", from: "Maya", text: "depends who's going", started: true,
+    setup: (t) => { t.members[P.Maya].rsvp = "unknown"; t.members[P.Maya].pendingAsk = { id: "a9", topic: "rsvp", needId: null, askedAt: 1, nudged: false }; }, check: (r) => first(has(r, /Sam|Leo|Krish/, "didn't say who's going"), r.trip.members[P.Maya].rsvp === "unknown" ? null : "guessed an rsvp") },
   { name: "rsvp no + reason", from: "Leo", text: "nah cant this weekend, family stuff", started: true, check: (r) => (r.trip.members[P.Leo].rsvp === "no" ? null : `rsvp ${r.trip.members[P.Leo].rsvp}`) },
   { name: "rsvp yes cant drive", from: "Sam", text: "yes! but i cant drive", started: true, check: (r) => (r.trip.members[P.Sam].rsvp === "yes" && !r.trip.members[P.Sam].carHint ? null : "missed yes / car") },
   { name: "budget words", from: "Maya", text: "idk like forty bucks?", started: true,

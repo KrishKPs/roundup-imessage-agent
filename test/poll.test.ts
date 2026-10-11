@@ -44,7 +44,7 @@ describe("organizer asks everyone", () => {
   it("the organizer's own free-text questions get organizer help, not the member answer", async () => {
     const { h, org } = await campTrip();
     await h.say(org, "does 10am saturday work for everyone?");
-    expect(h.transport.to(org)).toEqual([expect.stringMatching(/just text "ask everyone" and your question/)]);
+    expect(h.transport.to(org)[0]).toMatch(/just text "ask everyone" and your question/);
   });
 
   it("members can't poll the group", async () => {

@@ -21,11 +21,12 @@ import {
   type CommandEnv, type WebPerson, type WebTripInput, addPeople, announceJoins, markIn, newMember, setDate, createTrip, createWebTrip, greetWebSignup, handleCommand, joinWebTrip, optOut,
   sendTripCreated, welcome,
 } from "./commands.js";
-import { type Ctx, type EngineConfig, isGoing, organizerName, seatsNeed } from "./context.js";
+import { type Ctx, type EngineConfig, goingMembers, isGoing, organizerName, seatsNeed } from "./context.js";
 import { finalize } from "./plan.js";
 import { type SeedInput, buildDemoTrip } from "./seed.js";
 import { announce, cleanNote, findPoll, recordPollAnswer, resolveNames, startPoll } from "./poll.js";
 import { checkSilence } from "./timers.js";
+import { finishInterview, interviewAnswer, maybeAskPrefs, prefCounts, readConstraints, readInterests } from "./prefs.js";
 
 export interface EngineDeps {
   store: Store;
@@ -188,6 +189,13 @@ export class Engine {
       await this.makeItinerary(trip, null);
       return true;
     }
+    // plan.md F: a plain "yes" approves the draft (only when no other question is waiting on the organizer).
+    const orgAsk = trip.members[trip.organizer]?.pendingAsk;
+    const approve = /^(yes|yep|yeah|yup|ya|looks good|lgtm|perfect|approve|approved|love it|good to go|ship it)\b/i.test(body.trim());
+    if (approve && trip.itinerary && trip.itinerary.text !== trip.itinerary.sentText && (!orgAsk || ["interview", "interest", "constraint"].includes(orgAsk.topic))) {
+      sendItinerary(this.ctx, trip, this.ctx.cfg.tripLink?.(trip.code) ?? null);
+      return true;
+    }
     if (isSendItinerary(body) && trip.itinerary) {
       sendItinerary(this.ctx, trip, this.ctx.cfg.tripLink?.(trip.code) ?? null);
       return true;
@@ -324,7 +332,10 @@ export class Engine {
     if (!reply) return false;
     ctx.out(m.phone, { kind: "text", text: reply });
     // Keep the conversation on track: repeat the open question unless the reply already asks something.
-    if (m.pendingAsk && !reply.includes("?")) ctx.out(m.phone, askIntent(trip, m, m.pendingAsk));
+    // (Optional planning questions just wait: no nagging after small talk.)
+    if (m.pendingAsk && !reply.includes("?") && !["interview", "interest", "constraint"].includes(m.pendingAsk.topic)) {
+      ctx.out(m.phone, askIntent(trip, m, m.pendingAsk));
+    }
     return true;
   }
 
@@ -341,6 +352,10 @@ export class Engine {
           if (m.heardFrom && m.name && m.rsvp === "unknown" && !m.pendingAsk && m.phone !== trip.organizer) markIn(this.ctx, trip, m);
         }
         announceJoins(this.ctx, trip);
+        // plan.md C/E trigger: setup done and at least half of the people going said what they're into -> first draft.
+        const c = prefCounts(trip);
+        if (trip.prefs?.interviewDone && !trip.itinerary && !trip.awaitingPlace && trip.status !== "collecting_members"
+            && c.going > 0 && c.answered * 2 >= c.going) await this.makeItinerary(trip, null);
         if (trip.status === "collecting_members") {
           checkSilence(this.ctx, trip); // name questions can still go stale
           continue;
@@ -437,6 +452,45 @@ export class Engine {
     const ctx = this.ctx;
     const ask: Ask | null = m.pendingAsk ?? m.staleAsk;
     const isStale = !m.pendingAsk && !!m.staleAsk;
+
+    // "yeah as long as we're back by 8" at any point: the organizer hears the catch; the open question stays open.
+    if (m.phone !== trip.organizer && ask?.topic !== "rsvp" && ask?.topic !== "poll" && isGoing(m)) {
+      const condition = keywordParse(text, "rsvp").rsvp === "yes" ? rsvpCondition(text) : null;
+      if (condition) {
+        (trip.notes ??= []).push({ name: m.name || "someone", note: condition, at: ctx.now() });
+        ctx.out(trip.organizer, { kind: "question_organizer", name: m.name || "someone", note: condition, fyi: true });
+        ctx.out(m.phone, { kind: "text", text: `noted, i'll flag that to ${organizerName(trip)}` });
+        if (m.pendingAsk) ctx.out(m.phone, askIntent(trip, m, m.pendingAsk));
+        return;
+      }
+    }
+
+    // Setup interview (organizer) and preference questions (members): read in code, one at a time.
+    // A question or a request ("does 10am work for everyone?", "ask sam...") isn't a setup answer: normal path.
+    const request = /\?\s*$/.test(text) || /\binstead\b/i.test(text)
+      || /^(ask|tell|remind|let'?s?|can (you|u)|could (you|u)|check|pls|please|move|push|change|switch|actually|we need|need|start|status|send|make|figure|who|what|how|does|do|is|are|cancel|add)\b/i.test(text.trim());
+    if (ask && !isStale && ask.topic === "interview" && ask.step && !request) {
+      const r = interviewAnswer(trip, ask.step, text);
+      if (r === "done") return finishInterview(ctx, trip);
+      if (r === "next") {
+        resolvePending(ctx, trip, m); // sends the next setup question, if any
+        const more = m.pendingAsk?.topic === "interview" || m.askQueue.some((a) => a.topic === "interview");
+        if (!more) finishInterview(ctx, trip);
+        return;
+      }
+      // "other": not an answer to the setup question; handled below like any message (the question stays open).
+    }
+    if (ask && !isStale && (ask.topic === "interest" || ask.topic === "constraint")
+        && !/\?\s*$/.test(text) && keywordParse(text, null).intent !== "drop") {
+      const got = ask.topic === "interest" ? readInterests(text) : readConstraints(text);
+      m.prefs = { ...m.prefs, ...got };
+      const none = ask.topic === "interest" ? !got.interests?.length : !got.constraints?.length;
+      const acks = ask.topic === "interest" ? ["love that, noted", "nice, i'll work that in", "good to know"] : ["got it, i'll plan around that", "noted, that stays with me", "good to know, i'll plan around it"];
+      ctx.out(m.phone, { kind: "text", text: none ? "all good" : acks[m.phone.length % acks.length] });
+      ctx.log(trip, "answered", ask.topic === "interest" ? `${m.name} said what they're into` : `${m.name} answered the plan-around question`);
+      resolvePending(ctx, trip, m);
+      return;
+    }
 
     if (ask?.topic === "name") {
       const name = parseName(text);
@@ -704,8 +758,12 @@ export class Engine {
     }
 
     const done = trip.needs.every((n) => n.status !== "open");
+    // Rides and items are sorted: now everyone who's in gets the two preference questions (once each).
+    if (done) for (const m of goingMembers(trip)) if (!m.pendingAsk) maybeAskPrefs(ctx, trip, m);
+    // Optional planning questions (preferences, setup interview) never hold up the logistics plans.
+    const optional = (a: { topic: string } | null) => !!a && ["interest", "constraint", "interview"].includes(a.topic);
     const settled = Object.values(trip.members).every(
-      (m) => m.optedOut || (!m.pendingAsk && (m.askQueue.length === 0 || m.sentSinceReply >= 2)),
+      (m) => m.optedOut || ((!m.pendingAsk || optional(m.pendingAsk)) && (m.askQueue.every(optional) || m.sentSinceReply >= 2)),
     );
     if (done && settled) finalize(ctx, trip);
     else if (!done && trip.status === "finalized") trip.status = "coordinating";
