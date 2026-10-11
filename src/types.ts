@@ -45,6 +45,8 @@ export interface Itinerary {
   text: string; // one line per step, plain text
   updatedAt: number;
   sentAt: number | null; // null while it's still a draft only the organizer has seen
+  version?: number; // 1 on first send, +1 on every later send (shown on the page and PDF)
+  changes?: { version: number; at: number; summary: string }[]; // plain-language change log
 }
 
 /** "ask everyone does 10am saturday work?": asked 1:1, tallied, reported back to the organizer. */

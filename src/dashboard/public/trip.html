@@ -1,5 +1,6 @@
 <!doctype html>
-<!-- The trip page: the plan everyone in the group can open from their text. Names only; no budgets, no numbers. -->
+<!-- The Plan page (plan.md section 4): the trip as people want to see it, opened from a text. Public: first names
+     only, no phones, budgets (except the group number), constraints, votes or message text. Updates live. -->
 <html lang="en">
 <head>
 <meta charset="utf-8">
@@ -12,64 +13,193 @@
 <meta name="apple-mobile-web-app-title" content="Roundup">
 <link rel="apple-touch-icon" href="/apple-touch-icon.png">
 <script>if ("serviceWorker" in navigator) addEventListener("load", () => navigator.serviceWorker.register("/sw.js").catch(() => {}));</script>
-
 <title>Trip plan · Roundup</title>
 <link rel="stylesheet" href="/web.css">
 <style>
-  .plan { white-space: pre-wrap; font-size: 18px; line-height: 1.55; margin: 14px 0 0; }
-  .plan .first { font-weight: 800; font-size: 20px; display: block; margin-bottom: 6px; }
-  h2 { margin: 22px 0 8px; font-size: 14px; text-transform: uppercase; letter-spacing: 1.2px; color: var(--muted); }
-  .chips { display: flex; flex-wrap: wrap; gap: 8px; }
-  .chip { padding: 6px 12px; border-radius: 999px; background: #e8f6ee; border: 1px solid #b9e6c9; font-weight: 600; font-size: 15px; }
-  .row { padding: 8px 0; border-bottom: 1px solid #e3eef5; font-size: 16px; }
-  .row:last-child { border-bottom: 0; }
-  .waiting { color: var(--muted); }
+  body { font-size: 17px; }
+  .page { max-width: 760px; margin: 0 auto; padding: calc(14px + env(safe-area-inset-top)) 16px calc(24px + env(safe-area-inset-bottom)); }
+  .label { font-size: 13px; font-weight: 800; letter-spacing: 1.3px; text-transform: uppercase; color: var(--muted); margin: 0 0 10px; }
+  .card { margin-bottom: 14px; }
+  .muted { color: var(--muted); }
+  .ico { width: 20px; height: 20px; stroke: currentColor; fill: none; stroke-width: 2; stroke-linecap: round; stroke-linejoin: round; flex: none; }
+  /* hero */
+  .hero { padding: 22px 20px; background: linear-gradient(160deg, rgba(255,255,255,.92), rgba(220,242,255,.85)); }
+  .heroTop { display: flex; justify-content: space-between; gap: 12px; align-items: flex-start; }
+  .hero h1 { font-size: 34px; line-height: 1.08; margin: 4px 0 6px; letter-spacing: -.5px; }
+  .chips { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 10px; }
+  .pill { display: inline-flex; align-items: center; gap: 6px; padding: 6px 12px; border-radius: 999px; font-size: 14px; font-weight: 700; background: #e6f4fd; color: #1f5f8b; border: 1px solid #c8e5f6; }
+  .pill.ready { background: #d9f7e3; color: #1d7a43; border-color: #a8e4bc; }
+  .pdf { display: inline-flex; align-items: center; gap: 6px; min-height: 44px; padding: 0 14px; border-radius: 14px; font-weight: 800; font-size: 15px; text-decoration: none; color: #fff;
+         background: linear-gradient(180deg, #5ab8ff, #1f8ae6); box-shadow: 0 6px 16px rgba(31,138,230,.3); white-space: nowrap; }
+  /* progress */
+  .steps { display: grid; grid-template-columns: repeat(4, 1fr); gap: 6px; padding: 14px 16px; }
+  .pstep { text-align: center; font-size: 13px; font-weight: 700; color: var(--muted); }
+  .pstep .bar { height: 6px; border-radius: 999px; background: #dfeaf2; margin-bottom: 7px; }
+  .pstep.done .bar { background: #8ee0a9; } .pstep.now .bar { background: #2f9be0; } .pstep.now { color: var(--ink); }
+  /* timeline */
+  .day { padding: 20px; }
+  .tl { position: relative; margin: 6px 0 0; padding-left: 26px; }
+  .tl::before { content: ""; position: absolute; left: 9px; top: 6px; bottom: 6px; width: 2px; background: #cfe4f2; }
+  .item { position: relative; display: grid; grid-template-columns: 74px 1fr; gap: 10px; padding: 10px 12px; margin-bottom: 10px; border-radius: 14px; background: #f6fbfe; border: 1px solid #e1eef6; }
+  .item::before { content: ""; position: absolute; left: -22px; top: 16px; width: 12px; height: 12px; border-radius: 50%; background: #fff; border: 3px solid #2f9be0; }
+  .item.food::before { border-color: #ffb84d; } .item.free::before { border-color: #8ee0a9; } .item.drive::before { border-color: #7b8ea0; }
+  .time { font-weight: 800; font-variant-numeric: tabular-nums; color: #1f5f8b; font-size: 15px; padding-top: 1px; }
+  .what { display: flex; gap: 8px; align-items: flex-start; } .what .ico { margin-top: 2px; color: #456377; }
+  .flash { animation: flash 1.2s ease-out; } @keyframes flash { from { background: #fff4d6; } }
+  .empty { padding: 18px; border-radius: 14px; background: #f6fbfe; border: 1px dashed #cfe4f2; }
+  /* people, rides, bring */
+  .grid2 { display: grid; gap: 14px; grid-template-columns: minmax(0, 1fr); }
+  @media (min-width: 720px) { .grid2 { grid-template-columns: 1fr 1fr; } }
+  .people { display: flex; flex-wrap: wrap; gap: 10px; }
+  .person { display: grid; justify-items: center; gap: 4px; width: 60px; font-size: 13px; font-weight: 700; text-align: center; }
+  .av { width: 44px; height: 44px; border-radius: 50%; display: grid; place-items: center; font-weight: 800; color: #fff; background: linear-gradient(180deg, #6fc1f2, #2f9be0); position: relative; }
+  .person.maybe .av { opacity: .45; } .crown { position: absolute; top: -8px; right: -6px; width: 18px; height: 18px; color: #ffb84d; }
+  .car { display: flex; align-items: center; gap: 8px; padding: 8px 0; border-bottom: 1px solid #e3eef5; }
+  .car:last-child { border: 0; } .car b { min-width: 64px; }
+  .seat { width: 28px; height: 28px; border-radius: 50%; display: grid; place-items: center; font-size: 11px; font-weight: 800; }
+  .seat.f { background: #d9f7e3; color: #1d7a43; } .seat.e { border: 2px dashed #b9d6e6; }
+  .need { display: inline-flex; align-items: center; gap: 6px; min-height: 36px; padding: 6px 12px; border-radius: 999px; font-size: 15px; font-weight: 700; }
+  .need.ok { background: #d9f7e3; color: #1d7a43; } .need.open { border: 2px dashed #f2c46f; color: #8a5a00; }
+  .facts .row { display: flex; gap: 10px; padding: 9px 0; border-bottom: 1px solid #e3eef5; } .facts .row:last-child { border: 0; }
+  .facts .k { color: var(--muted); min-width: 96px; font-size: 15px; }
+  footer { text-align: center; color: var(--muted); font-size: 14px; padding: 10px 0 0; }
+  footer button { background: none; border: 0; color: #1f8ae6; font: inherit; font-weight: 700; min-height: 44px; cursor: pointer; }
+  #log { text-align: left; margin: 6px auto; max-width: 420px; }
+  @media (prefers-reduced-motion: reduce) { .flash { animation: none; } }
 </style>
 </head>
 <body>
-<main class="sheet">
-  <div class="brand">Roundup</div>
-  <section class="card" id="card"><p class="muted">loading…</p></section>
-  <p class="fine">Planned 1:1 over iMessage by Roundup, an AI. This page updates when the plan changes.</p>
-</main>
+<main class="page" id="page"><section class="card hero"><p class="muted">loading…</p></section></main>
 <script>
-  const esc = (s) => String(s ?? "").replace(/[&<>"]/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" }[c]));
-  const code = location.pathname.split("/").pop();
-  const card = document.getElementById("card");
+  const code = location.pathname.split("/")[2];
+  const page = document.getElementById("page");
+  const el = (tag, cls, text) => { const e = document.createElement(tag); if (cls) e.className = cls; if (text != null) e.textContent = text; return e; };
+  // Small inline icons, one line weight (no emoji: they render differently everywhere).
+  const PATHS = {
+    meet: "M12 21s-7-6.2-7-11a7 7 0 0 1 14 0c0 4.8-7 11-7 11z M12 12.5a2.5 2.5 0 1 0 0-5 2.5 2.5 0 0 0 0 5z",
+    drive: "M5 16h14l-1.5-5.5a2 2 0 0 0-2-1.5h-7a2 2 0 0 0-2 1.5L5 16z M5 16v3 M19 16v3 M7.5 13.5h.01 M16.5 13.5h.01",
+    food: "M7 3v8 M5 3v4a2 2 0 0 0 4 0V3 M7 11v10 M16 3c-1.7 0-3 2-3 5s1.3 4 3 4v9",
+    free: "M4 18h16 M6 18c0-4 2.7-7 6-7s6 3 6 7 M12 7V4",
+    activity: "M12 3l2.6 5.3 5.9.9-4.3 4.1 1 5.8L12 16.4 6.8 19.1l1-5.8L3.5 9.2l5.9-.9z",
+    pdf: "M7 3h7l5 5v13H7z M14 3v5h5 M10 13h6 M10 17h6",
+    crown: "M3 8l4 4 5-7 5 7 4-4-2 11H5z",
+  };
+  const icon = (name, cls = "ico") => {
+    const s = document.createElementNS("http://www.w3.org/2000/svg", "svg"); s.setAttribute("viewBox", "0 0 24 24"); s.setAttribute("class", cls);
+    const p = document.createElementNS("http://www.w3.org/2000/svg", "path"); p.setAttribute("d", PATHS[name]); s.appendChild(p); return s;
+  };
+  const card = (label, cls = "") => { const c = el("section", "card " + cls); c.style.padding = "18px 20px"; if (label) c.appendChild(el("p", "label", label)); return c; };
+  let prevItems = [];
 
   function render(t) {
-    const sub = [t.dateText, t.place].filter(Boolean).map(esc).join(" · ");
-    const plan = t.itinerary
-      ? `<div class="plan">${t.itinerary.split("\n").map((l, i) => i === 0 ? `<span class="first">${esc(l)}</span>` : esc(l)).join("\n")}</div>`
-      : `<p class="waiting">${esc(t.organizer)} is still putting the plan together. check back soon.</p>`;
-    const cars = t.cars.length
-      ? t.cars.map((c) => `<div class="row">🚗 <b>${esc(c.driver)}</b>${c.riders.length ? ` with ${c.riders.map(esc).join(", ")}` : ""}</div>`).join("")
-      : `<div class="row waiting">rides still being sorted</div>`;
-    const bring = t.bring.length
-      ? t.bring.map((b) => `<div class="row">${esc(b.item)}: ${b.who.length ? b.who.map(esc).join(", ") : '<span class="waiting">nobody yet</span>'}</div>`).join("")
-      : "";
-    card.innerHTML = `
-      <p class="eyebrow">organized by ${esc(t.organizer)}</p>
-      <h1>${esc(t.title)}</h1>
-      ${sub ? `<p class="muted">${sub}</p>` : ""}
-      ${plan}
-      <h2>Who's going</h2>
-      <div class="chips">${t.going.map((n) => `<span class="chip">${esc(n)}</span>`).join("") || '<span class="waiting">nobody yet</span>'}</div>
-      <h2>Rides</h2>${cars}
-      ${bring ? `<h2>What to bring</h2>${bring}` : ""}
-      ${t.budget !== null ? `<h2>Budget</h2><div class="row">everyone's comfortable up to $${esc(t.budget)}</div>` : ""}`;
+    page.replaceChildren();
+    // 1. hero
+    const hero = el("section", "card hero");
+    const top = el("div", "heroTop");
+    const left = el("div");
+    left.append(el("p", "label", `organized by ${t.organizer}`), el("h1", "", t.title));
+    const sub = [t.dateText, t.place].filter(Boolean).join(" · ");
+    if (sub) left.appendChild(el("div", "muted", sub));
+    const pdf = el("a", "pdf"); pdf.href = `/t/${encodeURIComponent(code)}/itinerary.pdf`; pdf.append(icon("pdf"), document.createTextNode("Get PDF"));
+    top.append(left, pdf); hero.appendChild(top);
+    const chips = el("div", "chips");
+    const status = { who: "gathering people", rides: "sorting rides", stops: "drafting the plan", ready: "plan ready" }[t.stage];
+    chips.appendChild(el("span", "pill" + (t.stage === "ready" ? " ready" : ""), status));
+    if (t.daysUntil !== null && t.daysUntil >= 0) chips.appendChild(el("span", "pill", t.daysUntil === 0 ? "today" : t.daysUntil === 1 ? "tomorrow" : `in ${t.daysUntil} days`));
+    hero.appendChild(chips); page.appendChild(hero);
+
+    // 2. progress strip
+    const steps = el("section", "card steps");
+    const order = ["who", "rides", "stops", "ready"], names = ["who's in", "rides", "picking stops", "plan ready"];
+    const at = order.indexOf(t.stage);
+    order.forEach((s, i) => { const d = el("div", "pstep" + (i < at ? " done" : i === at ? " now" : "")); d.append(el("div", "bar"), document.createTextNode(names[i])); steps.appendChild(d); });
+    page.appendChild(steps);
+
+    // 3. the day
+    const day = card("the day", "day");
+    if (t.items.length) {
+      const tl = el("div", "tl");
+      for (const it of t.items) {
+        const row = el("div", `item ${it.kind}`);
+        const changed = prevItems.length && !prevItems.some((p) => p.title === it.title && p.time === it.time);
+        if (changed) row.classList.add("flash");
+        const what = el("div", "what"); what.append(icon(it.kind), el("span", "", it.title));
+        row.append(el("div", "time", it.time || ""), what); tl.appendChild(row);
+      }
+      day.appendChild(tl);
+    } else {
+      const e = el("div", "empty");
+      e.appendChild(el("div", "", `${t.organizer} and roundup are putting the day together.`));
+      const g = t.goodToKnow, bits = [t.place && `where: ${t.place}`, g.leaveAt && `leaving at ${g.leaveAt}`, g.meetAt && `meeting at ${g.meetAt}`].filter(Boolean);
+      if (bits.length) e.appendChild(el("div", "muted", bits.join(" · ")));
+      day.appendChild(e);
+    }
+    prevItems = t.items;
+    page.appendChild(day);
+
+    const grid = el("div", "grid2");
+    // 5. who's going
+    const who = card("who's going");
+    const ppl = el("div", "people");
+    for (const p of t.going) { const d = el("div", "person"); const av = el("div", "av", p.name.slice(0, 1).toUpperCase()); if (p.organizer) av.appendChild(icon("crown", "crown")); d.append(av, el("span", "", p.name)); ppl.appendChild(d); }
+    for (const n of t.maybe) { const d = el("div", "person maybe"); d.append(el("div", "av", n.slice(0, 1).toUpperCase()), el("span", "", n)); ppl.appendChild(d); }
+    who.append(ppl, el("p", "muted", `${t.going.length} going${t.maybe.length ? ` · ${t.maybe.length} maybe` : ""}`));
+    grid.appendChild(who);
+    // 6. rides
+    if (t.ridesOn) {
+      const rides = card("rides");
+      if (t.cars.length) {
+        for (const c of t.cars) {
+          const row = el("div", "car"); row.appendChild(el("b", "", c.driver));
+          for (let i = 0; i < Math.max(0, c.seats - 1); i++) row.appendChild(c.riders[i] ? el("span", "seat f", c.riders[i].slice(0, 2).toUpperCase()) : el("span", "seat e"));
+          rides.appendChild(row);
+        }
+      } else rides.appendChild(el("p", "muted", `rides are being sorted, ${t.seatsSoFar} seats so far`));
+      grid.appendChild(rides);
+    }
+    page.appendChild(grid);
+    // 7. what to bring (chips; open items say "needed")
+    if (t.bring.length) {
+      const bring = card("what to bring"); const cs = el("div", "chips");
+      for (const b of t.bring) cs.appendChild(el("span", "need " + (b.who.length ? "ok" : "open"), b.who.length ? `${b.item} · ${b.who.join(", ")} ✓` : `${b.item} · needed`));
+      bring.appendChild(cs); page.appendChild(bring);
+    }
+    // 8. good to know
+    const g = t.goodToKnow;
+    const rows = [["meeting spot", g.meetAt], ["leaving at", g.leaveAt], ["back by", g.backBy], ["notes", g.notes], ["budget", t.budget !== null ? `everyone's comfortable up to $${t.budget}` : null]].filter(([, v]) => v);
+    if (rows.length) {
+      const facts = card("good to know", "facts");
+      for (const [k, v] of rows) { const r = el("div", "row"); r.append(el("span", "k", k), el("span", "", v)); facts.appendChild(r); }
+      page.appendChild(facts);
+    }
+    // 9. footer: version + change log
+    const foot = el("footer");
+    if (t.version) {
+      const when = t.updatedAt ? new Date(t.updatedAt).toLocaleTimeString([], { hour: "numeric", minute: "2-digit" }).toLowerCase() : "";
+      foot.appendChild(el("span", "", `v${t.version}${when ? ` · updated ${when}` : ""}`));
+      if (t.changes.length) {
+        const b = el("button", "", "what changed"); const log = el("div"); log.id = "log"; log.hidden = true;
+        for (const c of t.changes) log.appendChild(el("div", "", `v${c.version}: ${c.summary}`));
+        b.addEventListener("click", () => (log.hidden = !log.hidden));
+        foot.append(document.createTextNode(" · "), b, log);
+      }
+    }
+    foot.appendChild(el("div", "", "planned 1:1 over imessage by roundup, an ai"));
+    page.appendChild(foot);
   }
 
   async function load() {
     try {
-      const res = await fetch(`/api/t/${encodeURIComponent(code)}`);
-      const data = await res.json();
-      if (!res.ok) { card.innerHTML = `<p class="err">${esc(data.error)}</p>`; return; }
-      render(data);
-    } catch { /* keep the last version on screen if the network blips */ }
+      const r = await fetch(`/api/t/${encodeURIComponent(code)}`);
+      const d = await r.json();
+      if (!r.ok) { page.replaceChildren(el("section", "card hero", d.error || "This trip link doesn't work.")); return; }
+      render(d);
+    } catch { /* keep what's on screen if the network blips */ }
   }
   load();
-  setInterval(load, 15000); // the plan can change; pick it up without a reload
+  // Live: any change to the trip re-renders (falls back to polling if the stream can't connect).
+  try { const es = new EventSource(`/events?code=${encodeURIComponent(code)}`); es.addEventListener("state", load); } catch {}
+  setInterval(load, 30000);
 </script>
 </body>
 </html>
