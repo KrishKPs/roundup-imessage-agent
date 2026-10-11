@@ -111,6 +111,7 @@ export class Crowd {
   private bank: Bank;
   private rand = seeded(7);
   private timers = new Set<NodeJS.Timeout>();
+  private scheduled = new Set<string>(); // ask ids already being answered (one reply per question)
   engine?: Engine;
 
   constructor(private store: Store) {
@@ -140,6 +141,9 @@ export class Crowd {
     let p = this.personas.get(phone);
     if (!p) {
       p = makePersona(this.rand);
+      // Exactly 1 in 4 can drive (the spec's 25%), so a 12-person crowd always has ~3 cars and the chain can fill.
+      p.canDrive = this.personas.size % 4 === 2;
+      if (p.canDrive) { p.rsvp = "yes"; p.slow = false; }
       this.personas.set(phone, p);
     }
     return p;
@@ -153,14 +157,19 @@ export class Crowd {
     // The question we just asked is the member's pendingAsk (set before sending).
     const tripId = this.store.state.phoneTrip[phone];
     const m = tripId ? this.store.state.trips[tripId]?.members[phone] : undefined;
-    const topic = m?.pendingAsk?.topic;
-    if (!m || !topic) return; // an ack or a note: nothing to answer
+    const ask = m?.pendingAsk;
+    if (!m || !ask) return; // an ack or a note: nothing to answer
+    if (this.scheduled.has(ask.id)) return; // two texts in one go (ack + question): answer the question once
+    this.scheduled.add(ask.id);
+    const topic = ask.topic;
     const persona = this.personaFor(phone);
     if (persona.slow) return;
     const text = replyFor(persona, topic, this.bank, this.rand);
     if (!text) return;
     const t = setTimeout(() => {
       this.timers.delete(t);
+      const now = this.store.state.trips[this.store.state.phoneTrip[phone]]?.members[phone];
+      if (now?.pendingAsk?.id !== ask.id) return; // the question changed while "typing": don't answer the wrong one
       void this.engine?.handleInbound(phone, text);
     }, persona.replyDelayMs);
     this.timers.add(t);
@@ -169,6 +178,7 @@ export class Crowd {
   reset(): void {
     for (const t of this.timers) clearTimeout(t);
     this.timers.clear();
+    this.scheduled.clear();
     this.personas.clear();
     this.rand = seeded(7);
   }

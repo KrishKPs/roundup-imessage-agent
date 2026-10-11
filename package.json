@@ -6,6 +6,7 @@
   "scripts": {
     "test": "vitest run",
     "dev": "tsx src/index.ts",
+    "board": "tsx scripts/board.ts",
     "eval": "tsx scripts/eval-chat.ts",
     "try-llm": "tsx scripts/try-llm.ts",
     "simulate": "tsx scripts/simulate.ts",
